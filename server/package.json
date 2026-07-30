@@ -1,0 +1,21 @@
+{
+  "name": "@habitstracker/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HabitsTracker Fastify backend",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/migrate.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "pino": "^9.3.2"
+  }
+}
