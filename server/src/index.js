@@ -20,6 +20,7 @@ import surveyRoutes from './routes/surveys.js';
 import historyRoutes from './routes/history.js';
 import settingsRoutes from './routes/settings.js';
 import { startBot, stopBot } from './bot.js';
+import { startScheduler, stopScheduler } from './scheduler.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
 
@@ -63,6 +64,7 @@ const start = async () => {
   const shutdown = async (signal) => {
     logger.info({ signal }, 'shutting down');
     try {
+      stopScheduler();
       stopBot();
       await app.close();
       closeDb();
@@ -77,11 +79,16 @@ const start = async () => {
 
   // spec:02-user-stories.md#US-01, US-08 — Telegram bot.
   // Запускаем после успешного listen: если Telegram недоступен, API всё равно работает.
+  let botInstance = null;
   try {
-    startBot();
+    botInstance = startBot();
   } catch (err) {
     logger.error({ err }, 'failed to start telegram bot; continuing without it');
   }
+
+  // spec:03-features/reminders.md — in-process scheduler.
+  // Стартует всегда; если бота нет, sendMessage просто залогируется и пойдёт дальше.
+  startScheduler(botInstance);
 
   // spec:04-data-model.md#q6 — apply migrations on boot
   try {
