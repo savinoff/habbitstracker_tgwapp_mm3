@@ -18,6 +18,7 @@ import { authPlugin } from './plugins/auth.js';
 import healthRoutes from './routes/health.js';
 import surveyRoutes from './routes/surveys.js';
 import historyRoutes from './routes/history.js';
+import settingsRoutes from './routes/settings.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
 
@@ -42,6 +43,9 @@ const build = async () => {
 
   // spec:05-api.md#q5 — GET /api/history?days=7|30|-1 (issue #6).
   await app.register(historyRoutes);
+
+  // spec:05-api.md#q6, q7 — GET/POST /api/settings (issue #7).
+  await app.register(settingsRoutes);
 
   return app;
 };
