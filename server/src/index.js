@@ -17,6 +17,7 @@ import { errorPlugin } from './plugins/error.js';
 import { authPlugin } from './plugins/auth.js';
 import healthRoutes from './routes/health.js';
 import surveyRoutes from './routes/surveys.js';
+import historyRoutes from './routes/history.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
 
@@ -38,6 +39,9 @@ const build = async () => {
 
   // spec:05-api.md#q2 — POST /api/surveys/morning (issue #4).
   await app.register(surveyRoutes);
+
+  // spec:05-api.md#q5 — GET /api/history?days=7|30|-1 (issue #6).
+  await app.register(historyRoutes);
 
   return app;
 };
