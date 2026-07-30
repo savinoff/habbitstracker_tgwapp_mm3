@@ -166,11 +166,83 @@ export function textarea(formEl, name, label, { maxLen = 200, placeholder = '', 
   };
 }
 
+// ─── Time field (HH:MM input + custom chip row of allowed hours) ───
+// Использует нативный <input type="time"> — проще и нативно на iOS/Android.
+export function timeField(formEl, name, label, { minHour = 0, maxHour = 23 } = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field field--time';
+  wrap.innerHTML = `
+    <label class="field__label" for="time-${name}">${escapeHtml(label)}</label>
+    <input class="time-input" type="time" id="time-${name}" data-name="${name}" />
+    <p class="field__hint">Допустимо: ${pad(minHour)}:00–${pad(maxHour)}:59</p>
+  `;
+  formEl.appendChild(wrap);
+  const input = wrap.querySelector('.time-input');
+  return {
+    el: wrap,
+    getValue() { return input.value || null; },
+    setValue(v) { input.value = v || ''; },
+    isInWindow() {
+      const v = input.value;
+      if (!v) return { ok: false, message: 'укажите время' };
+      const h = Number(v.slice(0, 2));
+      if (h < minHour || h > maxHour) {
+        return { ok: false, message: `вне окна ${pad(minHour)}:00–${pad(maxHour)}:59` };
+      }
+      return { ok: true };
+    },
+  };
+}
+
+// ─── Select field ───
+export function selectField(formEl, name, label, options) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field field--select';
+  wrap.innerHTML = `
+    <label class="field__label" for="select-${name}">${escapeHtml(label)}</label>
+    <select class="select" id="select-${name}" data-name="${name}">
+      ${options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+    </select>
+  `;
+  formEl.appendChild(wrap);
+  const select = wrap.querySelector('.select');
+  return {
+    el: wrap,
+    getValue() { return select.value || null; },
+    setValue(v) { select.value = v || ''; },
+  };
+}
+
+// ─── Segmented control (период в history) ───
+export function segmentControl(parent, options, currentValue, onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'segment';
+  wrap.setAttribute('role', 'tablist');
+  wrap.innerHTML = options.map((o) => `
+    <button type="button" class="segment__btn" data-value="${escapeHtml(String(o.value))}" role="tab" aria-selected="${o.value === currentValue}">
+      ${escapeHtml(o.label)}
+    </button>
+  `).join('');
+  parent.appendChild(wrap);
+  wrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segment__btn');
+    if (!btn) return;
+    const v = btn.dataset.value;
+    if (v === currentValue) return;
+    wrap.querySelectorAll('.segment__btn').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
+    currentValue = v;
+    onChange?.(v);
+  });
+  return wrap;
+}
+
 // ─── Helpers ───
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+function pad(n) { return String(n).padStart(2, '0'); }
 
 function formatNumber(n) {
   // step=0.5 → 7.5; integer → 7
