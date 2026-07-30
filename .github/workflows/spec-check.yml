@@ -19,8 +19,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run spec-check
+      - name: Run spec-check (TЗ ↔ code traceability)
         run: node scripts/spec-check.js
+
+      - name: Install server deps
+        run: npm --prefix server install --no-audit --no-fund
+
+      - name: Run db migration smoke test
+        env:
+          TELEGRAM_BOT_TOKEN: test-token
+          OWNER_TELEGRAM_ID: '1'
+        run: node scripts/test-db.js
 
       - name: Summary
         if: always()
