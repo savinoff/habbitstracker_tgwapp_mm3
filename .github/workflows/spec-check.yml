@@ -31,6 +31,12 @@ jobs:
           OWNER_TELEGRAM_ID: '1'
         run: node scripts/test-db.js
 
+      - name: Run initData validation tests
+        env:
+          TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN
+          OWNER_TELEGRAM_ID: '777'
+        run: node scripts/test-initdata.js
+
       - name: Summary
         if: always()
         run: echo "spec-check finished with status ${{ job.status }}"
