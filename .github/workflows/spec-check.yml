@@ -18,10 +18,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-
-      - name: Install (no deps yet, but lock the workflow shape)
-        run: npm install --no-audit --no-fund --prefer-offline || true
 
       - name: Run spec-check
         run: node scripts/spec-check.js
