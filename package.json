@@ -10,6 +10,8 @@
   },
   "scripts": {
     "spec:check": "node scripts/spec-check.js",
-    "spec:list": "node scripts/spec-check.js --list"
+    "spec:list": "node scripts/spec-check.js --list",
+    "server:start": "npm --prefix server start",
+    "server:dev": "npm --prefix server run dev"
   }
 }
