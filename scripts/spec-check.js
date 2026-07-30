@@ -21,7 +21,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const SPEC_DIR = join(ROOT, 'docs', 'spec');
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'web', 'server', 'data', 'backups', '.github', '.vscode', '.idea']);
+// Каталоги, которые НЕ сканируем на маркеры:
+// - node_modules, .git: чужие/служебные
+// - dist, build: сгенерированные артефакты
+// - data, backups: рантайм-данные
+// - .github: workflows (там маркеры неуместны)
+// - .vscode, .idea: IDE
+// НЕ исключаем: server/ и web/ — это и есть наш код.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'data', 'backups', '.github', '.vscode', '.idea']);
 const MARGIN_HEADING = /^##\s+q(\d+)\.\s+/;
 const MARGIN_MARKER = /spec:([\w./-]+?)(?:\.md)?#q(\d+)/g;
 
