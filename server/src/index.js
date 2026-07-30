@@ -6,13 +6,16 @@
 // spec:05-api.md#q1     — общие правила API
 // spec:05-api.md#q8     — /api/health без auth
 // spec:07-non-functional.md#q4 — pino в stdout
-// spec:08-deploy.md#q10 — healthcheck используется Docker'ом
+// spec:08-deploy.md#q10 — healthcheck используется Docker'om
+// spec:04-data-model.md#q6 — apply migrations on boot
 
 import Fastify from 'fastify';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { errorPlugin } from './plugins/error.js';
 import healthRoutes from './routes/health.js';
+import { runMigrations } from './migrate.js';
+import { closeDb } from './db.js';
 
 const build = () => {
   const app = Fastify({
@@ -43,6 +46,7 @@ const start = async () => {
     logger.info({ signal }, 'shutting down');
     try {
       await app.close();
+      closeDb();
       process.exit(0);
     } catch (err) {
       logger.error({ err }, 'error during shutdown');
@@ -51,6 +55,14 @@ const start = async () => {
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  // spec:04-data-model.md#q6 — apply migrations on boot
+  try {
+    runMigrations();
+  } catch (err) {
+    logger.fatal({ err }, 'migrations failed; refusing to start');
+    process.exit(1);
+  }
 
   try {
     await app.listen({ host: config.host, port: config.port });
