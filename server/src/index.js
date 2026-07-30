@@ -1,10 +1,11 @@
 // server/src/index.js
-// Bootstrap Fastify, подключает health и единый error-handler.
-// Плагин initData-валидации и роуты surveys/history/settings приедут в следующих PR.
+// Bootstrap Fastify, подключает health, auth, единый error-handler.
+// Роуты surveys/history/settings приедут в phase-2 PR.
 //
 // spec:00-vision.md#q8  — Node 20+ + Fastify
 // spec:05-api.md#q1     — общие правила API
 // spec:05-api.md#q8     — /api/health без auth
+// spec:05-api.md#q9     — все остальные требуют initData
 // spec:07-non-functional.md#q4 — pino в stdout
 // spec:08-deploy.md#q10 — healthcheck используется Docker'om
 // spec:04-data-model.md#q6 — apply migrations on boot
@@ -13,11 +14,12 @@ import Fastify from 'fastify';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { errorPlugin } from './plugins/error.js';
+import { authPlugin } from './plugins/auth.js';
 import healthRoutes from './routes/health.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
 
-const build = () => {
+const build = async () => {
   const app = Fastify({
     loggerInstance: logger,
     disableRequestLogging: false,
@@ -29,6 +31,9 @@ const build = () => {
 
   // /api/health — без авторизации, должен быть доступен Docker healthcheck.
   await app.register(healthRoutes);
+
+  // spec:05-api.md#q9 — auth для всех /api/* кроме health.
+  await app.register(authPlugin);
 
   return app;
 };
