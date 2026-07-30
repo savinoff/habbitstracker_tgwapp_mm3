@@ -35,9 +35,13 @@ function camelToKebab(s) {
 }
 
 function getInitialTab() {
-  // spec:03-features/history.md#q2 — поддержка #history deep-link
+  // spec:03-features/history.md#q2 — поддержка #history deep-link.
+  // Два источника: window.location.hash И Telegram WebApp initDataUnsafe.start_param
+  // (второй используется, если Mini App открыт через кнопку с параметром ?startapp=).
   const hash = (window.location.hash || '').replace(/^#/, '');
   if (RENDERERS[hash]) return hash;
+  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+  if (startParam && RENDERERS[startParam]) return startParam;
   return 'home';
 }
 
