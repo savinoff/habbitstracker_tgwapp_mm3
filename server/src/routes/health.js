@@ -2,21 +2,25 @@
 // Liveness/readiness. Без авторизации, специально — нужен для Docker healthcheck.
 //
 // spec:05-api.md#q8 — контракт /api/health
+// spec:08-deploy.md#q10 — healthcheck используется Docker'ом
 
-import { config } from '../config.js';
+import { getDb } from '../db.js';
 
 const startedAt = Date.now();
+
+let _pingStmt = null;
+function ping() {
+  if (!_pingStmt) _pingStmt = getDb().prepare('SELECT 1 AS ok');
+  return _pingStmt.get();
+}
 
 export default async function healthRoutes(fastify) {
   fastify.get('/api/health', async () => {
     const uptimeSec = Math.floor((Date.now() - startedAt) / 1000);
-    // db_ok станет осмысленным после issue #2 (SQLite). До этого — false.
     let dbOk = false;
     try {
-      // Когда появится модуль db — заменим на прямой ping.
-      // Сейчас — best-effort: проверим, что путь доступен.
-      const { existsSync } = await import('node:fs');
-      dbOk = existsSync(config.databasePath);
+      ping();
+      dbOk = true;
     } catch {
       dbOk = false;
     }
