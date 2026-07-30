@@ -1,0 +1,16 @@
+{
+  "name": "@habitstracker/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HabitsTracker Telegram Mini App (Vite, vanilla JS)",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
