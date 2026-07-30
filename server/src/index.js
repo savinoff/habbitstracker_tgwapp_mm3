@@ -19,6 +19,7 @@ import healthRoutes from './routes/health.js';
 import surveyRoutes from './routes/surveys.js';
 import historyRoutes from './routes/history.js';
 import settingsRoutes from './routes/settings.js';
+import { startBot, stopBot } from './bot.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
 
@@ -62,6 +63,7 @@ const start = async () => {
   const shutdown = async (signal) => {
     logger.info({ signal }, 'shutting down');
     try {
+      stopBot();
       await app.close();
       closeDb();
       process.exit(0);
@@ -72,6 +74,14 @@ const start = async () => {
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  // spec:02-user-stories.md#US-01, US-08 — Telegram bot.
+  // Запускаем после успешного listen: если Telegram недоступен, API всё равно работает.
+  try {
+    startBot();
+  } catch (err) {
+    logger.error({ err }, 'failed to start telegram bot; continuing without it');
+  }
 
   // spec:04-data-model.md#q6 — apply migrations on boot
   try {
