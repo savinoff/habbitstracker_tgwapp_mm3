@@ -1,0 +1,56 @@
+# docker-compose.yml — production-like стэк.
+# В v0.1.0 — один сервис api+web. Nginx подключим отдельным контейнером
+# после того, как подготовим TLS (certbot). Сейчас — прямое подключение
+# к api:3000, а статику отдаёт сам api (route /static/*).
+#
+# Хостовые тома:
+#   /var/lib/habitstracker   — файл SQLite
+#   /var/backups/habitstracker — бэкапы
+#
+# Управление через Portainer: стэк "habitstracker" с этим файлом.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: habitstracker-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Хост для SQLite, смонтированный в /data (см. volumes).
+      - DATABASE_PATH=/data/habits.db
+      - STATIC_DIR=/app/web/dist
+    volumes:
+      - habits-data:/data
+      - habits-backups:/backups
+    ports:
+      # На VPS предполагается, что TLS терминирует nginx (или cloudflare).
+      # Для прямого теста без TLS — открыть 3000.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  habits-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/habitstracker
+  habits-backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/backups/habitstracker

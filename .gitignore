@@ -1,0 +1,55 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tgz
+.npm/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+.cache/
+.vite/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker
+docker-compose.override.yml
+
+# Local data (used by docker-compose volume mounts)
+data/
+*.db
+*.db-wal
+*.db-shm
+backups/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Misc
+.tmp/
+.temp/
