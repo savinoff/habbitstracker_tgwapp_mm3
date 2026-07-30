@@ -1,14 +1,16 @@
 // server/src/routes/surveys.js
-// POST /api/surveys/morning — утренний опрос (issue #4).
-// POST /api/surveys/evening — приедет в issue #5.
+// POST /api/surveys/morning — issue #4
+// POST /api/surveys/evening — issue #5
 //
-// spec:05-api.md#q2 — request/response contract
+// spec:05-api.md#q2 — morning contract
+// spec:05-api.md#q3 — evening contract
 // spec:05-api.md#q4 — server-side validation
-// spec:03-features/survey-morning.md#q2 — поля формы
-// spec:03-features/survey-morning.md#q3 — идемпотентный upsert
-// spec:04-data-model#q3 — morning_surveys
+// spec:03-features/survey-morning.md — morning
+// spec:03-features/survey-evening.md — evening
+// spec:04-data-model#q3, q4 — таблицы
 
 import { upsertMorningSurvey } from '../repos/morning.js';
+import { upsertEveningSurvey } from '../repos/evening.js';
 import { findByTelegramId, upsert as upsertUser } from '../repos/users.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,6 +60,81 @@ const morningSchema = {
   },
 };
 
+const eveningSchema = {
+  body: {
+    type: 'object',
+    required: ['date', 'smoked_count', 'ate_sugar', 'did_sport', 'mood_evening'],
+    additionalProperties: false,
+    properties: {
+      date: { type: 'string', minLength: 10, maxLength: 10 },
+      smoked_count: { type: 'integer', minimum: 0, maximum: 50 },
+      ate_sugar: { type: 'string', enum: ['yes', 'no', 'unsure'] },
+      did_sport: { type: 'boolean' },
+      sport_note: { type: 'string', maxLength: 100 },
+      mood_evening: { type: 'integer', minimum: 1, maximum: 5 },
+      best_memory: { type: 'string', maxLength: 300 },
+    },
+  },
+};
+
+/**
+ * Общая валидация поля date: календарная дата YYYY-MM-DD в окне ±N дней от today UTC.
+ * spec:05-api.md#q4
+ * spec:03-features/survey-morning.md#q3
+ *
+ * @returns {string|null} текст ошибки или null, если ок.
+ */
+function validateDateWindow(dateStr) {
+  if (typeof dateStr !== 'string' || !isValidCalendarDate(dateStr)) {
+    return 'must be a valid YYYY-MM-DD calendar date';
+  }
+  const today = todayUtcDateString();
+  const diff = daysBetween(today, dateStr);
+  if (diff < -ALLOWED_DATE_OFFSET_DAYS.past) {
+    return `must be within last ${ALLOWED_DATE_OFFSET_DAYS.past} days`;
+  }
+  if (diff > ALLOWED_DATE_OFFSET_DAYS.future) {
+    return `must not be more than ${ALLOWED_DATE_OFFSET_DAYS.future} day in the future`;
+  }
+  return null;
+}
+
+/**
+ * Нормализует текстовое поле: trim, пустая строка -> null, проверка maxLength.
+ * Возвращает { ok, value, error } — value мутирует в null/trimmed.
+ */
+function normalizeText(field, value, maxLen) {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  const trimmed = String(value).trim();
+  if (trimmed.length === 0) return { ok: true, value: null };
+  if (trimmed.length > maxLen) {
+    return { ok: false, error: `must be at most ${maxLen} characters after trim` };
+  }
+  return { ok: true, value: trimmed };
+}
+
+/**
+ * Убеждается, что у нас есть локальный пользователь, синхронизирует username/first_name.
+ * Возвращает локального пользователя. Создаёт, если такого telegram_id ещё нет.
+ */
+function ensureLocalUser(tgUser) {
+  const existing = findByTelegramId(tgUser.id);
+  const username = tgUser.username ?? null;
+  const first_name = tgUser.first_name ?? null;
+  if (!existing) {
+    return upsertUser({ telegram_id: tgUser.id, username, first_name });
+  }
+  if (existing.username !== username || existing.first_name !== first_name) {
+    return upsertUser({
+      telegram_id: tgUser.id,
+      username,
+      first_name,
+      timezone: existing.timezone,
+    });
+  }
+  return existing;
+}
+
 export default async function surveyRoutes(fastify) {
   // POST /api/surveys/morning
   fastify.post(
@@ -90,22 +167,8 @@ export default async function surveyRoutes(fastify) {
       // Если body есть, но поля типа отсутствуют — schema-валидация об этом уже сказала.
       // Дальнейшие кастомные проверки делаем, только если schema прошла.
       if (!vErr) {
-        if (typeof body.date !== 'string' || !isValidCalendarDate(body.date)) {
-          errors.push({ path: '/date', message: 'must be a valid YYYY-MM-DD calendar date' });
-        } else {
-          // spec:05-api.md#q4 — не раньше -7 и не дальше +1 дня от now_user_local.
-          // Для однользовательского MVP считаем «now_user_local» == today UTC;
-          // когда появится полноценная TZ-логика (вместе с #7 settings) — пересчитаем.
-          const today = todayUtcDateString();
-          // diff > 0 если body.date в будущем, < 0 если в прошлом.
-          const diff = daysBetween(today, body.date);
-          if (diff < -ALLOWED_DATE_OFFSET_DAYS.past) {
-            errors.push({ path: '/date', message: `must be within last ${ALLOWED_DATE_OFFSET_DAYS.past} days` });
-          }
-          if (diff > ALLOWED_DATE_OFFSET_DAYS.future) {
-            errors.push({ path: '/date', message: `must not be more than ${ALLOWED_DATE_OFFSET_DAYS.future} day in the future` });
-          }
-        }
+        const dateErr = validateDateWindow(body.date);
+        if (dateErr) errors.push({ path: '/date', message: dateErr });
 
         if (typeof body.sleep_hours !== 'number') {
           errors.push({ path: '/sleep_hours', message: 'must be a number' });
@@ -113,16 +176,11 @@ export default async function surveyRoutes(fastify) {
           errors.push({ path: '/sleep_hours', message: 'must be a multiple of 0.5' });
         }
 
-        // intention: trim до null если пустая строка
-        if (body.intention !== undefined && body.intention !== null) {
-          const trimmed = String(body.intention).trim();
-          if (trimmed.length === 0) {
-            body.intention = null;
-          } else if (trimmed.length > 200) {
-            errors.push({ path: '/intention', message: 'must be at most 200 characters after trim' });
-          } else {
-            body.intention = trimmed;
-          }
+        const intention = normalizeText('intention', body.intention, 200);
+        if (!intention.ok) {
+          errors.push({ path: '/intention', message: intention.error });
+        } else {
+          body.intention = intention.value;
         }
       }
 
@@ -132,25 +190,8 @@ export default async function surveyRoutes(fastify) {
         });
       }
 
-      // 2. Upsert пользователя (на случай, если бот ещё не вызвал /start).
-      const tgUser = req.user;
-      const existing = findByTelegramId(tgUser.id);
-      if (!existing) {
-        upsertUser({
-          telegram_id: tgUser.id,
-          username: tgUser.username ?? null,
-          first_name: tgUser.first_name ?? null,
-        });
-      } else if (existing.username !== (tgUser.username ?? null) || existing.first_name !== (tgUser.first_name ?? null)) {
-        // Поддерживаем актуальность username/first_name (могут меняться).
-        upsertUser({
-          telegram_id: tgUser.id,
-          username: tgUser.username ?? null,
-          first_name: tgUser.first_name ?? null,
-          timezone: existing.timezone,
-        });
-      }
-      const userRow = findByTelegramId(tgUser.id);
+      // 2. Upsert пользователя.
+      const userRow = ensureLocalUser(req.user);
 
       // 3. Upsert опроса.
       const row = upsertMorningSurvey({
@@ -160,6 +201,81 @@ export default async function surveyRoutes(fastify) {
         sleepQuality: body.sleep_quality,
         moodMorning: body.mood_morning,
         intention: body.intention ?? null,
+      });
+
+      return { ok: true, data: row };
+    },
+  );
+
+  // POST /api/surveys/evening
+  // spec:05-api.md#q3 — contract
+  // spec:03-features/survey-evening.md#q2 — поля
+  // spec:03-features/survey-evening.md#q3 — идемпотентный upsert
+  // spec:04-data-model#q4 — evening_surveys
+  fastify.post(
+    '/api/surveys/evening',
+    { schema: eveningSchema, attachValidation: true },
+    async (req, reply) => {
+      const vErr = req.validationError;
+      const body = req.body;
+      const errors = [];
+
+      if (!body || typeof body !== 'object') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION', message: 'Request body must be a JSON object' },
+        });
+      }
+
+      if (vErr && Array.isArray(vErr.validation)) {
+        for (const e of vErr.validation) {
+          const path = e.instancePath && e.instancePath.length > 0
+            ? e.instancePath
+            : '/' + (e.params?.missingProperty || '');
+          errors.push({ path, message: e.message });
+        }
+      }
+
+      if (!vErr) {
+        const dateErr = validateDateWindow(body.date);
+        if (dateErr) errors.push({ path: '/date', message: dateErr });
+
+        // spec:03-features/survey-evening.md#q2 — sport_note опционален,
+        // но если did_sport=false — клиент всё равно может прислать sport_note,
+        // и мы его примем (поле БД NULL-able). Не делаем cross-field валидацию,
+        // чтобы клиент мог постепенно дозаполнять.
+
+        const sportNote = normalizeText('sport_note', body.sport_note, 100);
+        if (!sportNote.ok) {
+          errors.push({ path: '/sport_note', message: sportNote.error });
+        } else {
+          body.sport_note = sportNote.value;
+        }
+
+        const bestMemory = normalizeText('best_memory', body.best_memory, 300);
+        if (!bestMemory.ok) {
+          errors.push({ path: '/best_memory', message: bestMemory.error });
+        } else {
+          body.best_memory = bestMemory.value;
+        }
+      }
+
+      if (errors.length) {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION', message: 'Invalid evening survey payload', details: errors },
+        });
+      }
+
+      const userRow = ensureLocalUser(req.user);
+
+      const row = upsertEveningSurvey({
+        userId: userRow.id,
+        localDate: body.date,
+        smokedCount: body.smoked_count,
+        ateSugar: body.ate_sugar,
+        didSport: body.did_sport,
+        sportNote: body.sport_note ?? null,
+        moodEvening: body.mood_evening,
+        bestMemory: body.best_memory ?? null,
       });
 
       return { ok: true, data: row };
