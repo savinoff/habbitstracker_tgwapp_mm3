@@ -45,6 +45,12 @@ jobs:
           APP_BASE_URL: https://example.com
         run: node scripts/test-bot.js
 
+      - name: Run scheduler tests
+        env:
+          TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN
+          OWNER_TELEGRAM_ID: '777'
+        run: node scripts/test-scheduler.js
+
       - name: Summary
         if: always()
         run: echo "spec-check finished with status ${{ job.status }}"
