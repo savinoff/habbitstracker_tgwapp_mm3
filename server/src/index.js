@@ -16,6 +16,7 @@ import { logger } from './logger.js';
 import { errorPlugin } from './plugins/error.js';
 import { authPlugin } from './plugins/auth.js';
 import healthRoutes from './routes/health.js';
+import surveyRoutes from './routes/surveys.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
 
@@ -34,6 +35,9 @@ const build = async () => {
 
   // spec:05-api.md#q9 — auth для всех /api/* кроме health.
   await app.register(authPlugin);
+
+  // spec:05-api.md#q2 — POST /api/surveys/morning (issue #4).
+  await app.register(surveyRoutes);
 
   return app;
 };
