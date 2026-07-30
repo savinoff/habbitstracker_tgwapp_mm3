@@ -12,6 +12,7 @@
 import { upsertMorningSurvey } from '../repos/morning.js';
 import { upsertEveningSurvey } from '../repos/evening.js';
 import { findByTelegramId, upsert as upsertUser } from '../repos/users.js';
+import { parseYmdUtc } from '../utils/dateInTz.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ALLOWED_DATE_OFFSET_DAYS = { past: 7, future: 1 };
@@ -40,8 +41,8 @@ function todayUtcDateString() {
 }
 
 function daysBetween(fromYmd, toYmd) {
-  const a = Date.UTC(...fromYmd.split('-').map(Number));
-  const b = Date.UTC(...toYmd.split('-').map(Number));
+  const a = parseYmdUtc(fromYmd).getTime();
+  const b = parseYmdUtc(toYmd).getTime();
   return Math.round((b - a) / 86400000);
 }
 
