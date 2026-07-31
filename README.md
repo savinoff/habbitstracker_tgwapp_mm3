@@ -52,6 +52,38 @@ cp .env.example .env  # заполнить TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID
 docker compose up -d
 ```
 
+## Деплой на VPS
+
+Подробнее — в [docs/spec/08-deploy.md](docs/spec/08-deploy.md). Коротко:
+
+1. **Подготовь VPS** (Ubuntu 22.04+ или Debian 12+):
+   ```sh
+   apt update && apt install -y docker.io docker-compose-v2 git
+   systemctl enable --now docker
+   ```
+
+2. **Склонируй репо и настрой bare-repo** (один раз):
+   ```sh
+   sudo /opt/habitstracker/scripts/setup-vps.sh
+   # впиши TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, APP_BASE_URL, WEBHOOK_URL в /opt/habitstracker/.env
+   ```
+
+3. **Установи ежедневный бэкап**:
+   ```sh
+   sudo apt install -y sqlite3 cron
+   sudo /opt/habitstracker/scripts/install-backup-cron.sh
+   ```
+
+4. **Деплой через `git push`**:
+   ```sh
+   # локально:
+   git remote add vps ssh://user@vps.example/srv/habitstracker
+   git push vps main
+   # на VPS автоматически: checkout → build → up -d
+   ```
+
+5. **HTTPS** — настрой nginx + Let's Encrypt (см. README, issue #15).
+
 ## Спецификация
 
 **Перед написанием кода прочитай [docs/spec/](docs/spec/) — это источник истины.**

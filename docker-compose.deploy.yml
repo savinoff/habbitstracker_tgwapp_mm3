@@ -1,0 +1,45 @@
+# docker-compose.deploy.yml — production compose file.
+#
+# Использование на VPS (после setup-vps.sh):
+#   cd /opt/habitstracker
+#   cp .env.example .env  (заполнить TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, APP_BASE_URL, WEBHOOK_URL)
+#   docker compose -f docker-compose.deploy.yml --env-file .env build
+#   docker compose -f docker-compose.deploy.yml --env-file .env up -d
+#
+# Альтернатива (post-receive hook делает это автоматически):
+#   git push origin main  →  hook запускает build + up -d.
+#
+# Отличия от docker-compose.yml:
+#   * Не открывает порт в host network (за nginx).
+#   * Без volumes для разработки (только bind mounts на /var/lib и /var/backups).
+#   * Production restart policy.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: habitstracker:latest
+    container_name: habitstracker-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PATH=/data/habits.db
+      - STATIC_DIR=/app/web/dist
+      - NODE_ENV=production
+    volumes:
+      - /var/lib/habitstracker:/data
+      - /var/backups/habitstracker:/backups
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # ВАЖНО: не публикуем порт 3000 наружу. nginx на хосте подключается к нему через docker network (см. nginx/Dockerfile).
