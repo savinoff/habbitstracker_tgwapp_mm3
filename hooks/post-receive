@@ -1,0 +1,33 @@
+#!/bin/sh
+# hooks/post-receive
+# Срабатывает после git push в bare-репо. Делает checkout + rebuild + restart.
+#
+# spec:08-deploy.md#q4 — bare repo + post-receive hook
+
+set -euo pipefail
+
+WORK_DIR="/opt/habitstracker"
+BRANCH="main"
+
+echo "▶ post-receive: deploy started"
+
+# 1. Checkout.
+echo "  - git checkout -f $BRANCH"
+GIT_WORK_TREE="$WORK_DIR" git checkout -f "$BRANCH"
+GIT_WORK_TREE="$WORK_DIR" git -C "$WORK_DIR" clean -fd
+GIT_WORK_TREE="$WORK_DIR" git -C "$WORK_DIR" reset --hard "origin/$BRANCH"
+
+# 2. Rebuild + restart.
+cd "$WORK_DIR"
+if [ -f .env ]; then
+  set -- docker compose -f docker-compose.deploy.yml --env-file .env
+else
+  set -- docker compose -f docker-compose.deploy.yml
+fi
+
+echo "  - docker compose build"
+"$@" build
+echo "  - docker compose up -d"
+"$@" up -d
+
+echo "✅ post-receive: deploy finished"
