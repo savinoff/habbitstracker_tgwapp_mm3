@@ -95,8 +95,9 @@ if [ ! -f "$WORK_DIR/.env" ] && [ -f "$WORK_DIR/.env.example" ]; then
   echo "   ⚠️  Edit $WORK_DIR/.env and fill:"
   echo "      - TELEGRAM_BOT_TOKEN"
   echo "      - OWNER_TELEGRAM_ID"
-  echo "      - APP_BASE_URL  (https://your-domain)"
-  echo "      - WEBHOOK_URL   (https://your-domain/webhook/telegram)"
+  echo "      - APP_BASE_URL  (https://your-domain, FQDN with DNS A-record pointing here)"
+  echo "      - CADDY_EMAIL   (email for ACME/Let's Encrypt registration)"
+  echo "      - WEBHOOK_URL   (https://your-domain/webhook/telegram, optional)"
 fi
 
 # ─── 6. First build & start ───

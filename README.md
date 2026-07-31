@@ -65,7 +65,7 @@ docker compose up -d
 2. **Склонируй репо и настрой bare-repo** (один раз):
    ```sh
    sudo /opt/habitstracker/scripts/setup-vps.sh
-   # впиши TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, APP_BASE_URL, WEBHOOK_URL в /opt/habitstracker/.env
+   # впиши TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, APP_BASE_URL, CADDY_EMAIL, WEBHOOK_URL в /opt/habitstracker/.env
    ```
 
 3. **Установи ежедневный бэкап**:
@@ -82,7 +82,7 @@ docker compose up -d
    # на VPS автоматически: checkout → build → up -d
    ```
 
-5. **HTTPS** — настрой nginx + Let's Encrypt (см. README, issue #15).
+5. **HTTPS — из коробки.** Caddy 2 поднимается в отдельном контейнере, при первом старте получает Let's Encrypt-сертификат для `APP_BASE_URL` (нужны DNS A-record и открытые 80/443 на VPS) и сам его обновляет. Никаких certbot-хуков.
 
 ## Спецификация
 
