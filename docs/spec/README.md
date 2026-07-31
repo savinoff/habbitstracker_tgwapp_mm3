@@ -1,8 +1,8 @@
 # Specification — `docs/spec/`
 
-> **spec_version:** 0.1.0
+> **spec_version:** 0.2.0
 > **status:** draft
-> **last_updated:** 2026-07-30
+> **last_updated:** 2026-07-31
 
 Этот каталог — **single source of truth** для проекта. Любое изменение поведения приложения сначала отражается здесь (коммитом `docs(spec): ...`), затем в коде.
 

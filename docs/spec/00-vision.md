@@ -69,7 +69,7 @@ The MVP is considered done when:
 | Backend | Node.js (>= 20) + Fastify | Single language, fast startup, good ecosystem |
 | Database | SQLite (file-based) | Single-file backup, zero ops, fine for one user |
 | Containers | Docker + docker-compose | Already present on VPS via Portainer |
-| Reverse proxy | Nginx + Let's Encrypt | Standard, well-documented |
+| Reverse proxy | Caddy 2 + Let's Encrypt | One config file, ACME built-in, no certbot to babysit |
 | Deploy | Bare git repo on VPS + post-receive hook | Simplest "git push = deploy" workflow |
 | CI | GitHub Actions (spec-check + lint) | Free for public repos |
 | Bot | Telegram Bot API via `node-telegram-bot-api` | Most popular, well-maintained |

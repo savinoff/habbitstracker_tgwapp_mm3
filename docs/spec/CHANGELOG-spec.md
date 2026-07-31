@@ -2,6 +2,33 @@
 
 Все значимые изменения в `docs/spec/`. Формат вдохновлён [Keep a Changelog](https://keepachangelog.com).
 
+## [0.2.0] — 2026-07-31
+
+### Changed
+- **08-deploy.md: nginx + certbot → Caddy 2.** ACME (Let's Encrypt)
+  встроен в Caddy, не нужен отдельный certbot-контейнер, нет
+  renewal-хуков. Конфиг — один `Caddyfile` в 5 строк.
+- **00-vision.md: стек.** Reverse proxy изменён на Caddy 2 +
+  Let's Encrypt с обоснованием.
+- **adr/0001-stack.md: добавлены альтернативы** — Traefik, Cloudflare
+  Tunnel — с обоснованием, почему выбран Caddy.
+
+### Added
+- **08-deploy.md: q11 (Caddyfile), q12 (связанные секции).**
+- **08-deploy.md: переменная `CADDY_EMAIL`** в `.env` / `.env.example`
+  для ACME-регистрации.
+- **08-deploy.md: named volumes `caddy_data` / `caddy_config`** для
+  хранения сертификатов и admin-состояния Caddy.
+
+### Fixed
+- (none)
+
+### Removed
+- (none)
+
+### Security
+- (unchanged from 0.1.0)
+
 ## [0.1.0] — 2026-07-30
 
 ### Added
