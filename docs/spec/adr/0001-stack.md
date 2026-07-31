@@ -2,7 +2,8 @@
 
 > **status:** accepted
 > **date:** 2026-07-30
-> **spec_version:** 0.1.0
+> **last_updated:** 2026-07-31
+> **spec_version:** 0.2.0
 
 ## Context
 
@@ -19,7 +20,7 @@ Telegram Mini App для трекера привычек. Single-user, self-host
 | Telegram bot | `node-telegram-bot-api` |
 | Scheduler | in-process `setInterval(60s)` с SQLite lock |
 | Containers | Docker + docker-compose (managed by Portainer) |
-| Reverse proxy + TLS | nginx + Let's Encrypt |
+| Reverse proxy + TLS | Caddy 2 + Let's Encrypt (ACME встроен) |
 | Deploy | bare git repo + post-receive hook на VPS |
 | CI | GitHub Actions (только `spec-check` в v0.1.0) |
 
@@ -49,6 +50,9 @@ Telegram Mini App для трекера привычек. Single-user, self-host
 - **Python + FastAPI** — нормальный выбор, но Node позволяет шарить типы/утилиты между бэком и фронтом.
 - **Webhook deploy от GitHub** — добавляет секрет, нужен публичный endpoint на VPS, риск. Для MVP — overkill, отложено.
 - **Watchtower** — лишний контейнер, лишний вектор атаки, а hook и так пересобирает.
+- **nginx + certbot** — original spec, replaced because two services (nginx + certbot) and renewal hooks add config surface for a single-service deployment.
+- **Traefik** — Docker-native, but its dashboard and metrics are overkill for a single-user app.
+- **Cloudflare Tunnel** — zero open ports, but adds dependency on a third-party service.
 
 ## Notes
 
