@@ -2,12 +2,12 @@
 
 Telegram Mini App — личный трекер привычек. Два опроса в день (утро + вечер), напоминания от бота, история, всё на своём VPS, никаких внешних сервисов.
 
-![spec](https://img.shields.io/badge/spec-0.3.4-blue)
+![spec](https://img.shields.io/badge/spec-0.4.0-blue)
 ![status](https://img.shields.io/badge/license-MIT-green)
 ![status](https://img.shields.io/badge/deployed-2026--08--01-brightgreen)
-![status](https://img.shields.io/badge/Mini_App-working_in_Telegram-2ea44f?logo=telegram)
+![status](https://img.shields.io/badge/Mini_App-multi--user_ready-2ea44f?logo=telegram)
 
-> 🎉 **v0.3.4 — первая рабочая версия в проде.** Mini App загружается в реальном Telegram WebView, форма утреннего/вечернего опроса работает, HMAC валидация проходит. См. [changelog](docs/spec/CHANGELOG-spec.md) — там три недели отладки, очень полезные уроки в финале.
+> 🎉 **v0.4.0 «Multi-user (manual approval)» в коде — готово к деплою.** 5 PR-ов в main: миграция users+audit_log, DB-whitelist с escape hatch через `OWNER_TELEGRAM_ID`, 6 admin-команд в боте, `/api/admin/*` + audit dual-write (БД+файл), web-онбординг (TZ) и 403-экраны. См. [changelog](docs/spec/CHANGELOG-spec.md#040--2026-08-01--multi-user-manual-approval). v0.3.4 — первая рабочая single-user версия, остаётся рабочей для owner'а.
 
 ## Что это
 
@@ -15,9 +15,11 @@ Telegram Mini App — личный трекер привычек. Два опр�
 - 🌙 Вечерний опрос: курение, сладкое, спорт, состояние, лучшее воспоминание.
 - ⏰ Настраиваемые напоминания (утро/вечер) в твоём часовом поясе.
 - 📜 История: последние 7 / 30 / все дни.
-- 🔒 Single-user, доступ только по валидированному `initData` Telegram.
+- 👥 **Multi-user (v0.4.0+):** до 10 пользователей, owner одобряет через бота (`/allow`, `/deny`, `/list_pending` и т.д.), каждый в своём TZ.
+- 🛡️ Аудит admin-действий: двойная запись (БД + `data/audit.log`).
+- 🔒 Доступ только по валидированному `initData` Telegram + статус в БД.
 - 🐳 Деплой одной командой: `git push` → bare-repo hook → Docker.
-- 💾 SQLite, бэкап одной строкой.
+- 💾 SQLite, бэкап одной строкой (включая `audit.log`).
 
 ## Стек
 
@@ -122,6 +124,7 @@ bash scripts/redeploy.sh --logs      # деплой из main
 - [04-data-model.md](docs/spec/04-data-model.md) — структура БД.
 - [05-api.md](docs/spec/05-api.md) — REST-контракты.
 - [08-deploy.md](docs/spec/08-deploy.md) — как развернуть.
+- [09-multi-user.md](docs/spec/09-multi-user.md) — v0.4.0: ручное одобрение пользователей.
 
 ## Разработка
 
