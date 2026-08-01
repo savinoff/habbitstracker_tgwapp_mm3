@@ -2,6 +2,60 @@
 
 Все значимые изменения в `docs/spec/`. Формат вдохновлён [Keep a Changelog](https://keepachangelog.com).
 
+## [0.4.0] — 2026-08-01 — **Multi-user (manual approval)**
+
+Расширение single-user (только owner) до multi-user с ручным одобрением
+заявок через бота. До 10 пользователей. Owner — единственный админ.
+
+### Added
+- **09-multi-user.md** — новая секция (13 вопросов, от цели до acceptance criteria).
+- **`users` table** (см. `04-data-model.md#q2`): добавлены `last_name`, `language_code`,
+  `is_premium`, `status` (pending/approved/denied/banned), `updated_at`, `deleted_at`,
+  `last_seen_at`. Удалён `timezone` (перенесён в `user_settings.tz`).
+- **`audit_log` table** (см. `04-data-model.md#q7`): actor_id, action, target_id,
+  request_ip, user_agent, request_id, details (JSON).
+- **Bot commands** (только owner): `/allow <id>`, `/deny <id>`, `/list_pending`,
+  `/list_users`, `/revoke <id>`, `/unban <id>`. Все логируются в `audit_log`.
+- **`/start` flow**: pending → уведомление owner'у с max-инфой (id, @username, имя,
+  время, язык, is_premium, был ли раньше, start_param). Approved re-`/start` →
+  info-уведомление owner'у.
+- **API `/api/users/me`, `/api/users/me/settings`** (GET/POST).
+- **API `/api/admin/users`, `/api/admin/audit`, `/api/admin/stats`** (только owner).
+- **Web onboarding**: приветствие + обязательный выбор TZ (из 23 вариантов).
+  Без выбора TZ форма опроса заблокирована.
+- **Web 403-экраны**: для `pending` / `denied` / `banned` — разные сообщения,
+  кнопка «Написать боту».
+- **Audit dual-write**: в `audit_log` (БД) + `data/audit.log` (файл, JSON lines,
+  daily ротация, 30 дней retention).
+- **Daily owner reminder** в 10:00 локального времени owner'а: «У тебя N
+  нерассмотренных заявок» (если N>0).
+- **Per-user scheduler**: reminder каждому в **его** TZ, по `user_settings.tz`.
+
+### Changed
+- **`05-api.md#q9`**: описание whitelist обновлено. Теперь: escape hatch через
+  `OWNER_TELEGRAM_ID` (всегда OK), иначе — `SELECT users.status`.
+- **`04-data-model.md#q1`**: soft-delete теперь **разрешён** (только для `users`).
+- **`05-api.md#q9`**: HMAC-формула — `HMAC-SHA256("WebAppData", BOT_TOKEN)`
+  (канонический алгоритм, см. v0.3.4).
+
+### Migration
+- Применяется автоматически при старте api (см. `09-multi-user.md#q11`).
+- `users` и `audit_log` создаются.
+- `user_settings` (если есть запись) привязывается к `users.telegram_id=OWNER_TELEGRAM_ID`.
+- `morning_surveys` и `evening_surveys` — добавляется `user_id`, все записи → owner.
+- Твои данные целы, ничего не потеряно.
+
+### Security
+- Все admin-команды логируются (actor, action, target, ts, request_id, status).
+- 403-ответы для не-одобренных **не раскрывают** причину бана (только `status`).
+- IP хранится только в `audit_log` (для аудита admin-действий, не для обычных логинов).
+
+### Что НЕ входит (см. `09-multi-user.md#q12`)
+- «Поделиться» (deeplink) — v0.5+.
+- Multi-owner.
+- 2FA, TOTP, OAuth.
+- Cross-user аналитика.
+
 ## [0.3.4] — 2026-08-01 — 🎉 **ПЕРВАЯ РАБОЧАЯ ВЕРСИЯ В ПРОДЕ**
 
 Mini App `HabitsTracker` заработала end-to-end в реальном Telegram WebView.

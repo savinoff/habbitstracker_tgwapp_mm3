@@ -1,8 +1,8 @@
 # 04. Data Model
 
-> **spec_version:** 0.1.0
+> **spec_version:** 0.4.0
 > **status:** draft
-> **last_updated:** 2026-07-30
+> **last_updated:** 2026-08-01
 
 Хранилище — SQLite. Схема миграций — `server/migrations/NNNN_name.sql`, применяется при старте бэкенда.
 
@@ -14,28 +14,44 @@
 - Первичный ключ — `id INTEGER PRIMARY KEY AUTOINCREMENT`.
 - Временные метки — `INTEGER` (unix epoch, **UTC**, секунды). Конвертация в локальное время — на клиенте (или в presentation-слое бэка).
 - Дата дня (`local_date`) — `TEXT` в формате `YYYY-MM-DD`, **локальная** дата пользователя. Хранится для удобства запросов и уникальных индексов.
-- Soft-delete **не используется**. Удаление записи — `DELETE`.
+- Soft-delete — **только для `users` через `deleted_at`**. Остальные таблицы — `DELETE`.
 - Внешние ключи включены: `PRAGMA foreign_keys = ON;`.
 
 ## q2. Таблица `users`
 
 ```sql
 CREATE TABLE users (
-  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  telegram_id     INTEGER NOT NULL UNIQUE,
-  username        TEXT,
-  first_name      TEXT,
-  timezone        TEXT NOT NULL DEFAULT 'UTC',
-  created_at      INTEGER NOT NULL,
-  updated_at      INTEGER NOT NULL
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id            INTEGER NOT NULL UNIQUE,
+  username               TEXT,
+  first_name             TEXT,
+  last_name              TEXT,
+  language_code          TEXT,
+  is_premium             INTEGER,                 -- 0/1/NULL
+  timezone               TEXT NOT NULL DEFAULT 'UTC',
+  morning_reminder_time  TEXT NOT NULL DEFAULT '09:00',  -- HH:MM
+  evening_reminder_time  TEXT NOT NULL DEFAULT '21:00',  -- HH:MM
+  status                 TEXT NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending','approved','denied','banned')),
+  created_at             INTEGER NOT NULL,
+  updated_at             INTEGER NOT NULL,
+  deleted_at             INTEGER,                 -- soft delete (status='banned')
+  last_seen_at           INTEGER,                 -- обновляется при каждом login
+  onboarded_at           INTEGER                  -- NULL = онбординг не пройден
 );
 CREATE UNIQUE INDEX idx_users_telegram_id ON users(telegram_id);
+CREATE INDEX idx_users_status ON users(status, deleted_at);
 ```
 
 Поля:
 - `telegram_id` — ID пользователя в Telegram. Уникален.
-- `username`, `first_name` — кэш для удобства, **не** доверенный (может меняться).
-- `timezone` — IANA TZ строка. Источник правды для всех time-расчётов.
+- `username`, `first_name`, `last_name`, `language_code`, `is_premium` — кэш из Telegram, **не** доверенный (может меняться).
+- `timezone` — IANA TZ. Per-user. Меняется через `/api/users/me/settings` (или на странице «Настройки»).
+- `morning_reminder_time` / `evening_reminder_time` — `HH:MM`, в локальном времени пользователя (его TZ).
+- `status` — `pending` / `approved` / `denied` / `banned`. См. `09-multi-user.md#q2`.
+- `deleted_at` — soft delete marker. `banned = deleted_at IS NOT NULL`.
+- `last_seen_at` — для UI «последний раз был 3 дня назад», и для daily-reminder owner'у.
+- `onboarded_at` — NULL = пользователь не выбрал TZ (см. `09-multi-user.md#q8`); NULL → блокируем опросы, показываем онбординг.
 
 ## q3. Таблица `morning_surveys`
 
@@ -108,23 +124,48 @@ CREATE TABLE schema_migrations (
 
 Стандартный паттерн — без ORM, руками.
 
-## q7. ER-диаграмма (текстом)
+## q7. Таблица `audit_log` (v0.4.0+)
+
+```sql
+CREATE TABLE audit_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts              INTEGER NOT NULL,        -- UTC unix sec
+  actor_id        INTEGER REFERENCES users(id),   -- NULL = system
+  action          TEXT NOT NULL,           -- 'allow'|'deny'|'revoke'|'unban'|'login_success'|'login_denied'|'start_received'|...
+  target_id       INTEGER REFERENCES users(id),
+  request_ip      TEXT,
+  user_agent      TEXT,
+  request_id      TEXT,                    -- X-Request-Id
+  details         TEXT                     -- JSON
+);
+CREATE INDEX idx_audit_ts ON audit_log(ts DESC);
+CREATE INDEX idx_audit_actor ON audit_log(actor_id, ts DESC);
+CREATE INDEX idx_audit_target ON audit_log(target_id, ts DESC);
+```
+
+Двухканальный аудит (см. `09-multi-user.md#q10`): каждое событие пишется и
+сюда, и в `data/audit.log` (JSON lines, ротация daily, 30 дней retention).
+
+## q8. ER-диаграмма (текстом)
 
 ```
 users (1) ──< (N) morning_surveys
 users (1) ──< (N) evening_surveys
 users (1) ──< (N) reminder_log
+users (1) ──< (N) audit_log      (actor_id)
+users (1) ──< (N) audit_log      (target_id)
 ```
 
-## q8. Что НЕ хранится
+## q9. Что НЕ хранится
 
 - Пароли / токены пользователя (аутентификация — Telegram `initData`).
 - Refresh-токены.
-- IP-адреса (для MVP логи запросов достаточно на уровне Nginx, не в БД).
 - Согласия, версии политики конфиденциальности — пользователь один, доверие.
+- **(v0.4.0+)** IP-адреса — теперь хранятся в `audit_log.request_ip` (для аудита admin-действий).
 
-## q9. Связанные секции
+## q10. Связанные секции
 
 - `05-api.md` — как модель используется в API.
 - `07-non-functional.md#q6` — бэкапы.
 - `08-deploy.md#q3` — где физически лежит файл.
+- `09-multi-user.md` — v0.4.0+: пользователи, lifecycle, аудит.

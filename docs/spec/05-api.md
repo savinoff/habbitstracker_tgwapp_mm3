@@ -1,6 +1,6 @@
 # 05. API
 
-> **spec_version:** 0.3.0
+> **spec_version:** 0.4.0
 > **status:** draft
 > **last_updated:** 2026-08-01
 
@@ -160,14 +160,25 @@ Liveness / readiness. **Без** авторизации.
 X-Telegram-Init-Data: <значение из window.Telegram.WebApp.initData>
 ```
 
-Бэкенд:
-1. Парсит query-string из `initData`.
-2. Проверяет подпись HMAC-SHA256 с ключом `sha256(BOT_TOKEN)` (см. официальную доку Telegram).
-3. Проверяет, что `auth_date` не старше 5 минут (защита от replay).
-4. Достаёт `user.id` и сравнивает с `OWNER_TELEGRAM_ID` из `.env` (single-user whitelist).
-5. Если всё ок — создаёт/обновляет запись в `users` (upsert).
+Бэкенд (`server/src/auth.js#validateInitData`):
+1. Парсит query-string через `URLSearchParams` (URL-decoded значения).
+2. Извлекает `hash`. Остальные поля — для `data_check_string`.
+3. Считает `secret_key = HMAC-SHA256(key="WebAppData", msg=BOT_TOKEN)`.
+4. Считает `data_check_string = поля (кроме hash), отсортированные по ключу, через \n, key=value (decoded)`.
+5. `computed = HMAC-SHA256(secret_key, data_check_string)`, сравнивается с `hash` (constant-time).
+6. Проверяет, что `auth_date` не старше 5 минут (защита от replay).
+7. **(v0.4.0+)** Whitelist:
+   - Если `user.id == OWNER_TELEGRAM_ID` из `.env` — **escape hatch**, всегда OK.
+   - Иначе: `SELECT status, deleted_at FROM users WHERE telegram_id = ?`.
+     - `pending` → 403, code `NOT_APPROVED`, status `pending`.
+     - `denied` → 403, code `BANNED`, status `denied`.
+     - `banned` (`deleted_at IS NOT NULL`) → 403, code `BANNED`, status `banned`.
+     - `approved` → OK, обновляем `last_seen_at = now()`.
+8. **Только** для escape hatch: если в БД нет записи с `telegram_id=OWNER_TELEGRAM_ID` — создаём `users` (`status='approved'`).
 
-Любой невалидный шаг → 401.
+Любой невалидный шаг → 401. Запрещённый статус → 403.
+
+См. `07-non-functional.md#q3` для деталей HMAC и `09-multi-user.md#q5` для деталей whitelist.
 
 ## q10. Статика и SPA fallback
 
@@ -194,8 +205,135 @@ Mini App (фронтенд из `web/dist`) **раздаётся самим Fast
 - Caddy **всё равно** проксирует на api — он не знает, что api сам раздаёт статику.
 - Если в будущем выделим статику в CDN — поменяем только этот раздел.
 
-## q11. Связанные секции
+## q12. Маршруты `/api/users/*` (v0.4.0+)
+
+### GET /api/users/me
+
+Возвращает профиль текущего пользователя (из `validateInitData`).
+
+**Ответ 200:**
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 1,
+    "telegram_id": 90898219,
+    "username": "DimSav",
+    "first_name": "Dmitry",
+    "last_name": "",
+    "language_code": "ru",
+    "is_premium": true,
+    "status": "approved",
+    "is_owner": true,                  // true если telegram_id == OWNER_TELEGRAM_ID
+    "created_at": 1754678400,
+    "last_seen_at": 1754678400,
+    "onboarded": true                  // true если user_settings.onboarded_at IS NOT NULL
+  }
+}
+```
+
+### GET /api/users/me/settings
+
+Возвращает настройки текущего пользователя. **Все поля живут в `users`**
+(см. `04-data-model.md#q2`).
+
+**Ответ 200:**
+```json
+{
+  "ok": true,
+  "data": {
+    "tz": "Europe/Moscow",
+    "morning_hour_minute": "08:30",
+    "evening_hour_minute": "22:15",
+    "onboarded_at": 1754678400
+  }
+}
+```
+
+### POST /api/users/me/settings
+
+Обновление настроек текущего пользователя. Используется в онбординге (только `tz`)
+и на странице «Настройки» (все поля).
+
+**Запрос:**
+```json
+{ "tz": "Europe/Moscow", "morning_hour_minute": "08:30" }
+```
+
+Поля:
+- `tz` — IANA TZ (из `web/src/ui/tz-list.js`, 23 варианта).
+- `morning_hour_minute` — `HH:MM`, 04:00–11:59.
+- `evening_hour_minute` — `HH:MM`, 18:00–23:59.
+
+Любое подмножество полей. Если `tz` задан и `onboarded_at IS NULL` — устанавливается `onboarded_at = now()`.
+
+**Ответ 200:** как GET.
+
+## q13. Маршруты `/api/admin/*` (v0.4.0+, только owner)
+
+Доступны **только** если `user.id == OWNER_TELEGRAM_ID`. Все запросы логируются в `audit_log`.
+
+### GET /api/admin/users
+
+Список всех пользователей с пагинацией.
+
+**Query:**
+- `status` — optional, фильтр по `pending|approved|denied|banned`.
+- `limit` — default 50, max 200.
+- `offset` — default 0.
+
+**Ответ 200:**
+```json
+{
+  "ok": true,
+  "data": {
+    "users": [
+      { "id": 1, "telegram_id": 90898219, "username": "DimSav", "first_name": "Dmitry",
+        "status": "approved", "created_at": ..., "last_seen_at": ..., "deleted_at": null }
+    ],
+    "total": 3,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+### GET /api/admin/audit
+
+Лог аудита.
+
+**Query:**
+- `action` — optional, фильтр по `allow|deny|revoke|unban|...`.
+- `actor_id` — optional.
+- `target_id` — optional.
+- `since_ts` — optional, unix sec, default = now - 7 days.
+- `limit` — default 100, max 500.
+
+**Ответ 200:** аналогично `/api/admin/users`, `data.items = [...]`.
+
+### GET /api/admin/stats
+
+Сводка для UI админа.
+
+**Ответ 200:**
+```json
+{
+  "ok": true,
+  "data": {
+    "users_total": 3,
+    "users_pending": 1,
+    "users_approved": 2,
+    "users_denied": 0,
+    "users_banned": 0,
+    "surveys_today": { "morning": 1, "evening": 0 },
+    "reminders_sent_today": 2
+  }
+}
+```
+
+## q14. Связанные секции
 
 - `04-data-model.md` — структура таблиц.
 - `07-non-functional.md#q3` — детали валидации `initData`.
 - `06-ui-states.md` — где эти API вызываются из UI.
+- `09-multi-user.md` — пользователи, lifecycle, аудит, scheduler, web UI.
