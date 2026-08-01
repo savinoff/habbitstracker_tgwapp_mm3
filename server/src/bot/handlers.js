@@ -4,8 +4,10 @@
 // spec:02-user-stories.md#US-01..US-08
 // spec:03-features/reminders.md#q4
 // spec:09-multi-user.md#q3 — admin-команды (v0.4.0+)
+// spec:09-multi-user.md#q10 — audit на admin-операции
 
 import * as users from '../users.js';
+import * as audit from '../audit.js';
 import { config } from '../config.js';
 import { TEXTS } from './texts.js';
 import { setMenuButton } from './menu.js';
@@ -114,6 +116,13 @@ export function registerHandlers(bot, { appBaseUrl, logger }) {
           logger.warn({ err }, 'failed to notify owner about new request');
         }
       }
+      // Audit: новая заявка (actor=null = system, target=requestor).
+      audit.audit({
+        actor_id: null,
+        action: 'start_received',
+        target_id: from.id,
+        details: { status: 'pending', was_before: false },
+      });
     } catch (err) {
       logger.error({ err, chatId }, 'failed to handle /start');
       try {
@@ -172,6 +181,11 @@ export function registerHandlers(bot, { appBaseUrl, logger }) {
       await bot.sendMessage(tgId, `✅ Доступ открыт! Открывай трекер: /start`);
     } catch { /* пользователь мог не писать боту */ }
     logger.info({ actorId: msg.from.id, targetId: tgId }, 'admin allow');
+    audit.audit({
+      actor_id: msg.from.id,
+      action: 'allow',
+      target_id: tgId,
+    });
   });
 
   // /deny <id> — pending|approved → denied.
@@ -201,6 +215,11 @@ export function registerHandlers(bot, { appBaseUrl, logger }) {
       await bot.sendMessage(tgId, `❌ Заявка отклонена.`);
     } catch { /* ignore */ }
     logger.info({ actorId: msg.from.id, targetId: tgId }, 'admin deny');
+    audit.audit({
+      actor_id: msg.from.id,
+      action: 'deny',
+      target_id: tgId,
+    });
   });
 
   // /revoke <id> — approved → banned (soft delete).
@@ -227,6 +246,11 @@ export function registerHandlers(bot, { appBaseUrl, logger }) {
     const updated = users.softDelete(tgId);
     await bot.sendMessage(msg.chat.id, TEXTS.revokeOk(updated));
     logger.info({ actorId: msg.from.id, targetId: tgId }, 'admin revoke');
+    audit.audit({
+      actor_id: msg.from.id,
+      action: 'revoke',
+      target_id: tgId,
+    });
   });
 
   // /unban <id> — banned → approved, deleted_at = NULL.
@@ -249,6 +273,11 @@ export function registerHandlers(bot, { appBaseUrl, logger }) {
     const updated = users.unban(tgId);
     await bot.sendMessage(msg.chat.id, TEXTS.unbanOk(updated));
     logger.info({ actorId: msg.from.id, targetId: tgId }, 'admin unban');
+    audit.audit({
+      actor_id: msg.from.id,
+      action: 'unban',
+      target_id: tgId,
+    });
   });
 
   // /list_pending — все pending-заявки.
@@ -304,6 +333,15 @@ function isOwner(from, ownerId, logger) {
   if (!from || Number(from.id) !== Number(ownerId)) {
     if (from && logger) {
       logger.warn({ fromId: from.id, ownerId }, 'non-owner tried admin command');
+      // Audit неудачной admin-попытки (actor=from.id, target=null).
+      try {
+        audit.audit({
+          actor_id: from.id,
+          action: 'admin_denied',
+          target_id: null,
+          details: { reason: 'not_owner' },
+        });
+      } catch { /* ignore */ }
     }
     return false;
   }

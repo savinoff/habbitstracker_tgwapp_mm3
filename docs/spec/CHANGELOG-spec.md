@@ -11,22 +11,21 @@
 - **09-multi-user.md** — новая секция (13 вопросов, от цели до acceptance criteria).
 - **`users` table** (см. `04-data-model.md#q2`): добавлены `last_name`, `language_code`,
   `is_premium`, `status` (pending/approved/denied/banned), `updated_at`, `deleted_at`,
-  `last_seen_at`. Удалён `timezone` (перенесён в `user_settings.tz`).
+  `last_seen_at`, `onboarded_at`.
 - **`audit_log` table** (см. `04-data-model.md#q7`): actor_id, action, target_id,
-  request_ip, user_agent, request_id, details (JSON).
+  request_ip, user_agent, request_id, details (JSON). БЕЗ FK на users (actor/target
+  — это telegram_id, не users.id).
 - **Bot commands** (только owner): `/allow <id>`, `/deny <id>`, `/list_pending`,
   `/list_users`, `/revoke <id>`, `/unban <id>`. Все логируются в `audit_log`.
 - **`/start` flow**: pending → уведомление owner'у с max-инфой (id, @username, имя,
   время, язык, is_premium, был ли раньше, start_param). Approved re-`/start` →
   info-уведомление owner'у.
-- **API `/api/users/me`, `/api/users/me/settings`** (GET/POST).
+- **API `/api/users/me`, `/api/users/me/settings`** (GET/POST), `/api/users/timezones`.
 - **API `/api/admin/users`, `/api/admin/audit`, `/api/admin/stats`** (только owner).
-- **Web onboarding**: приветствие + обязательный выбор TZ (из 23 вариантов).
-  Без выбора TZ форма опроса заблокирована.
-- **Web 403-экраны**: для `pending` / `denied` / `banned` — разные сообщения,
-  кнопка «Написать боту».
-- **Audit dual-write**: в `audit_log` (БД) + `data/audit.log` (файл, JSON lines,
-  daily ротация, 30 дней retention).
+- **Audit dual-write** (v0.4.0+): в `audit_log` (БД) + `data/audit.log` (файл,
+  JSON lines, daily ротация, 30 дней retention). Пишется при login_success/login_denied
+  + всех admin-командах + bot-операциях.
+- **`backup.sh`** теперь включает `audit.log` в ежедневный бэкап.
 - **Daily owner reminder** в 10:00 локального времени owner'а: «У тебя N
   нерассмотренных заявок» (если N>0).
 - **Per-user scheduler**: reminder каждому в **его** TZ, по `user_settings.tz`.
@@ -40,10 +39,10 @@
 
 ### Migration
 - Применяется автоматически при старте api (см. `09-multi-user.md#q11`).
-- `users` и `audit_log` создаются.
-- `user_settings` (если есть запись) привязывается к `users.telegram_id=OWNER_TELEGRAM_ID`.
-- `morning_surveys` и `evening_surveys` — добавляется `user_id`, все записи → owner.
-- Твои данные целы, ничего не потеряно.
+- `0003_multi_user.sql`: расширение `users` + создание `audit_log` + post-migration
+  hook ставит owner'у `status='approved'`.
+- `0004_audit_no_fk.sql`: пересоздаёт `audit_log` без FK (actor/target = telegram_id).
+- Никаких ручных шагов, твои данные целы.
 
 ### Security
 - Все admin-команды логируются (actor, action, target, ts, request_id, status).
@@ -55,6 +54,7 @@
 - Multi-owner.
 - 2FA, TOTP, OAuth.
 - Cross-user аналитика.
+- **Web UI** (onboarding, 403-экраны) — следующий PR #5.
 
 ## [0.3.4] — 2026-08-01 — 🎉 **ПЕРВАЯ РАБОЧАЯ ВЕРСИЯ В ПРОДЕ**
 

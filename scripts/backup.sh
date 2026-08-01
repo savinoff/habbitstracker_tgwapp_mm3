@@ -26,6 +26,13 @@ if [ ! -f "$DATA_DIR/habits.db" ]; then
   exit 1
 fi
 
+# v0.4.0+ — backup audit.log рядом с SQLite.
+# audit.log пишется в AUDIT_DIR (рядом с DB, см. server/src/audit.js).
+if [ -f "$DATA_DIR/audit.log" ]; then
+  cp -p "$DATA_DIR/audit.log" "$BACKUP_DIR/audit-${TS}.log"
+  find "$BACKUP_DIR" -name 'audit-*.log' -mtime +30 -delete
+fi
+
 if command -v sqlite3 >/dev/null 2>&1; then
   # CLI path: атомарный .backup.
   sqlite3 "$DATA_DIR/habits.db" ".backup '$BACKUP_FILE'"
