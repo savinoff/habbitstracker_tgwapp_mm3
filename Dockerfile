@@ -24,13 +24,15 @@ RUN apk add --no-cache tini sqlite
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV STATIC_DIR=/app/web/dist
 
 # api
 COPY --from=api-deps /app/node_modules ./node_modules
 COPY server/ ./server/
 COPY scripts/ ./scripts/
 
-# web (статика) — рядом с api, отдаётся nginx'ом
+# web (статика) — отдаётся самим Fastify через @fastify/static, см. server/src/index.js
+# и docs/spec/05-api.md#q10. Раньше отдавалось nginx'ом, но мы убрали nginx в v0.2.0.
 COPY --from=web-build /web/dist ./web/dist
 
 # Healthcheck

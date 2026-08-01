@@ -1,16 +1,21 @@
 // server/src/index.js
-// Bootstrap Fastify, подключает health, auth, единый error-handler.
-// Роуты surveys/history/settings приедут в phase-2 PR.
+// Bootstrap Fastify: health, auth, surveys/history/settings routes, error-handler,
+// статика из web/dist + SPA fallback, Telegram bot, scheduler, migrations.
 //
-// spec:00-vision.md#q8  — Node 20+ + Fastify
-// spec:05-api.md#q1     — общие правила API
-// spec:05-api.md#q8     — /api/health без auth
-// spec:05-api.md#q9     — все остальные требуют initData
+// spec:00-vision.md#q8   — Node 20+ + Fastify
+// spec:05-api.md#q1      — общие правила API
+// spec:05-api.md#q8      — /api/health без auth
+// spec:05-api.md#q9      — все остальные /api/* требуют initData
+// spec:05-api.md#q10     — статика из web/dist + SPA fallback
 // spec:07-non-functional.md#q4 — pino в stdout
-// spec:08-deploy.md#q10 — healthcheck используется Docker'om
+// spec:08-deploy.md#q10  — healthcheck используется Docker'om
 // spec:04-data-model.md#q6 — apply migrations on boot
 
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve as pathResolve } from 'node:path';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { errorPlugin } from './plugins/error.js';
@@ -23,6 +28,8 @@ import { startBot, stopBot } from './bot.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { runMigrations } from './migrate.js';
 import { closeDb } from './db.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const build = async () => {
   const app = Fastify({
@@ -40,14 +47,48 @@ const build = async () => {
   // spec:05-api.md#q9 — auth для всех /api/* кроме health.
   await app.register(authPlugin);
 
-  // spec:05-api.md#q2 — POST /api/surveys/morning (issue #4).
+  // spec:05-api.md#q2 — POST /api/surveys/morning.
   await app.register(surveyRoutes);
 
-  // spec:05-api.md#q5 — GET /api/history?days=7|30|-1 (issue #6).
+  // spec:05-api.md#q5 — GET /api/history?days=7|30|-1.
   await app.register(historyRoutes);
 
-  // spec:05-api.md#q6, q7 — GET/POST /api/settings (issue #7).
+  // spec:05-api.md#q6, q7 — GET/POST /api/settings.
   await app.register(settingsRoutes);
+
+  // spec:05-api.md#q10 — статика и SPA fallback.
+  // ВАЖНО: регистрируем ПОСЛЕ всех API-роутов, чтобы /api/* не уходил в static.
+  // Static-файлы отдаются с cache-control: immutable, чтобы Telegram WebView
+  // не делал лишних запросов.
+  if (config.staticDir && existsSync(config.staticDir)) {
+    await app.register(fastifyStatic, {
+      root: pathResolve(config.staticDir),
+      prefix: '/',
+      index: ['index.html'],
+      cacheControl: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 дней
+      immutable: true,
+      decorateReply: false,
+    });
+
+    // SPA fallback: GET на любой не-/api путь, которого нет в static,
+    // отдаёт index.html (для клиентского роутинга /history, /settings).
+    app.setNotFoundHandler((req, reply) => {
+      const accept = req.headers.accept || '';
+      // /api/* и запросы с Accept: application/json — обычный 404 JSON.
+      if (req.url.startsWith('/api/') || accept.includes('application/json')) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: `Route not found: ${req.method} ${req.url}` },
+        });
+      }
+      // Иначе — SPA index.html.
+      return reply.sendFile('index.html');
+    });
+
+    logger.info({ staticDir: config.staticDir }, 'static + SPA fallback enabled');
+  } else {
+    logger.info({ staticDir: config.staticDir || '(unset)' }, 'static disabled');
+  }
 
   return app;
 };
