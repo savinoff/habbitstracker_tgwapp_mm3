@@ -20,9 +20,9 @@
 
 ## q3. Безопасность
 
-- **Telegram `initData` валидация** на каждом запросе (см. `05-api.md#q9`). Алгоритм:
-  1. Извлечь `hash` из query-string. Также может присутствовать `signature` (клиентская подпись для Bot API от имени пользователя) — её **тоже** исключаем из `data_check_string`.
-  2. Собрать `data_check_string` — все поля кроме `hash` и `signature`, отсортированные по ключу, через `\n`. **Критично**: значения берём в **raw URL-encoded форме** прямо из query-string initData. Нельзя парсить через `URLSearchParams` (он декодирует `https%3A%5C%2F` → `https:\/`) и собирать обратно — HMAC перестанет совпадать с Telegram. Корректный способ: `raw.split('&').filter(p => !p.startsWith('hash=') && !p.startsWith('signature=')).sort().join('\n')`.
+- **Telegram `initData` валидация** на каждом запросе (см. `05-api.md#q9`). Алгоритм (по [официальной спеке](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)):
+  1. Извлечь `hash` из query-string (это и есть подпись). Остальные поля, включая `signature` (Ed25519-подпись для third-party), парсятся через `URLSearchParams` (даёт URL-decoded значения).
+  2. Собрать `data_check_string` — все поля кроме `hash`, отсортированные по ключу, через `\n`, формат `key=value` (с **decoded** значениями, потому что `URLSearchParams.get()` уже отдаёт декодированные).
   3. `secret_key = HMAC-SHA256(key="WebAppData", msg=BOT_TOKEN)` (вложенный HMAC, не простой sha256 от токена).
   4. `computed = hmac_sha256(secret_key, data_check_string)` (hex).
   5. Сравнить с `hash` (constant-time compare).

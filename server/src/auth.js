@@ -5,21 +5,21 @@
 // spec:05-api.md#q9 — алгоритм валидации
 // spec:07-non-functional.md#q3 — TTL 5 min, whitelist, no logging of initData
 
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const MAX_USER_OBJ_BYTES = 4096;
 
 /**
  * Парсит initData (query-string) в массив пар [key, value].
- * Значения возвращаются **декодированными** (URL-decoded) — для удобства
- * дальнейшей работы с `user` (JSON.parse) и проверки наличия полей.
- * Для data_check_string этого недостаточно: там нужна **raw** форма, см. buildDataCheckString.
+ * Значения возвращаются **декодированными** (URL-decoded) — это и есть
+ * форма, которую Telegram ожидает в data_check_string.
+ *
+ * spec:07-non-functional.md#q3, https://core.telegram.org/bots/webapps#validating-data
  */
 export function parseInitData(raw) {
   if (typeof raw !== 'string' || raw.length === 0) {
     throw new ValidationError('initData is empty', 'EMPTY');
   }
-  // URLSearchParams умеет в повторяющиеся ключи и декодирование.
   const params = new URLSearchParams(raw);
   const out = [];
   for (const [k, v] of params) {
@@ -33,32 +33,18 @@ export function parseInitData(raw) {
 
 /**
  * Собирает data_check_string по алгоритму Telegram:
- *  - все поля кроме hash и signature
+ *  - все поля кроме hash (это и есть подпись)
  *  - отсортированы по ключу
- *  - формат: key=value в **raw** URL-encoded форме
+ *  - формат: key=value (URL-decoded значения)
  *  - объединены \n
  *
- * Принимает **исходную строку** initData, а не распарсенные entries.
- * Это критично: если пары пересобрать через URLSearchParams + key=value,
- * Telegram декодирует значения (например `https%3A%5C%2F` → `https:\/`)
- * и хеш перестаёт совпадать с присланным.
- *
- * spec:07-non-functional.md#q3 — оба поля (hash и signature) исключены.
- *   `hash` — это сама подпись, мы её проверяем отдельно.
- *   `signature` — клиентская подпись для Bot API, в HMAC не участвует.
+ * spec:07-non-functional.md#q3
  */
-export function buildDataCheckString(raw) {
-  if (typeof raw !== 'string' || raw.length === 0) {
-    throw new ValidationError('initData is empty', 'EMPTY');
-  }
-  return raw
-    .split('&')
-    .filter((pair) => {
-      const eq = pair.indexOf('=');
-      const key = eq === -1 ? pair : pair.slice(0, eq);
-      return key !== 'hash' && key !== 'signature';
-    })
-    .sort()
+export function buildDataCheckString(entries) {
+  return entries
+    .filter(([k]) => k !== 'hash')
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k}=${v}`)
     .join('\n');
 }
 
@@ -101,26 +87,12 @@ export function validateInitData(raw, botToken, opts = {}) {
   if (!user) throw new ValidationError('user missing', 'NO_USER');
 
   // 1. Подпись.
-  // buildDataCheckString получает raw строку чтобы сохранить URL-encoded форму полей.
-  const dataCheckString = buildDataCheckString(raw);
+  const dataCheckString = buildDataCheckString(entries);
   // spec:05-api.md#q9, https://core.telegram.org/bots/webapps#validating-data
   // secret_key = HMAC-SHA256(key="WebAppData", msg=bot_token) — не sha256(bot_token)!
   const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest();
   const computed = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
   if (!safeEqualHex(computed, hash)) {
-    // DEBUG (v0.3.2): пишем метрики чтобы понять что не сходится в проде.
-    // Никаких user-данных, только длины и hash-префиксы.
-    process.stderr.write(JSON.stringify({
-      level: 40,
-      code: 'BAD_SIGNATURE_DEBUG',
-      rawLen: raw.length,
-      hashLen: hash.length,
-      dcsLen: dataCheckString.length,
-      computedPrefix: computed.slice(0, 16),
-      expectedPrefix: hash.slice(0, 16),
-      dcsPrefix: dataCheckString.slice(0, 120),
-      dcsSuffix: dataCheckString.slice(-120),
-    }) + '\n');
     throw new ValidationError('signature mismatch', 'BAD_SIGNATURE');
   }
 
