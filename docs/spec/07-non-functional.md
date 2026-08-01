@@ -27,7 +27,12 @@
   4. `computed = hmac_sha256(secret_key, data_check_string)` (hex).
   5. Сравнить с `hash` (constant-time compare).
   6. Проверить, что `auth_date` не старше 5 минут (защита от повторного использования).
-  7. **Whitelist**: `user.id` (из `initData.user`) == `process.env.OWNER_TELEGRAM_ID`.
+  7. **Whitelist** (v0.4.0+):
+     - **Escape hatch**: `user.id == process.env.OWNER_TELEGRAM_ID` — всегда OK,
+       даже если в БД нет записи. Создаёт `users (status='approved')` при первом логине.
+     - **Иначе**: `SELECT status, deleted_at FROM users WHERE telegram_id = ?`.
+       `pending|denied|banned` → 403, `approved` → OK.
+     - Полный flow — см. `09-multi-user.md#q5`.
 - **BOT_TOKEN и OWNER_TELEGRAM_ID** — только в `.env`, **никогда** в коде, **никогда** в git (`.gitignore` блокирует `.env`).
 - **HTTPS** — обязателен (Let's Encrypt). Telegram шлёт `initData` только на HTTPS-страницы.
 - **CORS** — `Access-Control-Allow-Origin` жёстко равен origin Mini App (наш собственный домен). Никакого `*`.
