@@ -64,26 +64,27 @@ function expectOk(fn, label, predicate) {
 /**
  * Строит initData + хеш по алгоритму Telegram, идентичному спецификации.
  * Принимает объект полей (без hash) и фиксированный botToken.
- * Telegram считает data_check_string по **raw** URL-encoded форме полей,
- * поэтому не получится собрать initData через URLSearchParams.toString()
- * (он перекодирует значения). Вместо этого склеиваем руками: encodeURIComponent
- * для каждого значения, потом фильтруем hash, сортируем по ключу.
+ * Поведение:
+ *  1. data_check_string считается по **decoded** значениям (Telegram
+ *     отдаёт initData в URL-encoded, но при валидации декодирует
+ *     значения — поэтому decoded форма попадает в HMAC).
+ *  2. Затем initData сериализуется в URL-encoded query string — точно
+ *     так, как это делает Telegram WebApp.
  */
 function buildInitData(fields) {
-  // 1. Собираем raw строку без hash — точно так, как это делает Telegram WebApp.
-  const parts = Object.entries(fields)
-    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-    .join('&');
-  // 2. data_check_string по алгоритму Telegram: фильтр hash + сортировка по ключу.
-  const dataCheckString = parts
-    .split('&')
-    .filter((p) => !p.startsWith('hash='))
-    .sort()
+  // 1. data_check_string по decoded значениям (sort + filter hash + key=value).
+  const dataCheckString = Object.entries(fields)
+    .filter(([k]) => k !== 'hash')
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k}=${v}`)
     .join('\n');
   // spec:05-api.md#q9: secret_key = HMAC-SHA256(key="WebAppData", msg=BOT_TOKEN)
   const secretKey = createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
   const hash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-  return `${parts}&hash=${hash}`;
+  // 2. Сериализуем все поля (включая hash) в URL-encoded query string.
+  return Object.entries({ ...fields, hash })
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
 }
 
 const user = { id: OWNER_ID, first_name: 'Test', username: 'tester' };
