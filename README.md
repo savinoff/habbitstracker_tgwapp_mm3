@@ -2,9 +2,9 @@
 
 Telegram Mini App — личный трекер привычек. Два опроса в день (утро + вечер), напоминания от бота, история, всё на своём VPS, никаких внешних сервисов.
 
-![status](https://img.shields.io/badge/spec-0.1.0-blue)
+![spec](https://img.shields.io/badge/spec-0.3.1-blue)
 ![status](https://img.shields.io/badge/license-MIT-green)
-![status](https://img.shields.io/badge/mvp-in%20progress-orange)
+![status](https://img.shields.io/badge/deployed-2026--08--01-brightgreen)
 
 ## Что это
 
@@ -43,13 +43,23 @@ habitstracker/
 └── .env.example
 ```
 
-## Quick start (после реализации кода)
+## Quick start (локальная разработка)
 
 ```bash
 git clone https://github.com/savinoff/habbitstracker_tgwapp_mm3.git
 cd habitstracker
 cp .env.example .env  # заполнить TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID
-docker compose up -d
+docker compose -f docker-compose.yml up        # dev: api + web
+# или для production-сборки в одном контейнере:
+docker compose -f docker-compose.deploy.yml up -d --build
+```
+
+## Quick start (прод-деплой на сервере)
+
+```bash
+# На сервере, после setup-vps.sh и заполнения .env:
+cd ~/opt/habitstracker
+bash scripts/redeploy.sh --logs      # деплой из main
 ```
 
 ## Деплой на VPS
