@@ -1,6 +1,6 @@
 # Specification — `docs/spec/`
 
-> **spec_version:** 0.3.0
+> **spec_version:** 0.3.1
 > **status:** draft
 > **last_updated:** 2026-08-01
 

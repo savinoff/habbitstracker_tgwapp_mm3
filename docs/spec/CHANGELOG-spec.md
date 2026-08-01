@@ -2,6 +2,21 @@
 
 Все значимые изменения в `docs/spec/`. Формат вдохновлён [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.1] — 2026-08-01
+
+### Added
+- **`scripts/redeploy.sh`** — ручной redeploy из GitHub. Тянет свежий код,
+  пересобирает образы, перезапускает контейнеры, проверяет /api/health.
+  Аргументы: `--branch=<name>`, `--no-build`, `--logs`, `--help`.
+- **`08-deploy.md#q14`** — описание deploy workflow: три способа (redeploy.sh,
+  git push через bare-repo hook, GitHub webhook для будущего).
+
+### Changed
+- **`hooks/post-receive`** — теперь bare-repo знает про GitHub (origin=GitHub),
+  hook сам делает `git fetch origin` после push.
+- **`scripts/setup-vps.sh`** — настраивает `origin` bare-repo на GitHub,
+  чтобы hook мог тянуть свежий код.
+
 ## [0.3.0] — 2026-08-01
 
 ### Changed

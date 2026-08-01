@@ -1,26 +1,32 @@
-#!/bin/sh
+#!/bin/bash
 # hooks/post-receive
-# Срабатывает после git push в bare-репо. Делает checkout + rebuild + restart.
+# Срабатывает после git push в bare-репо.
+# Bare-repo имеет origin=GitHub (настраивается в scripts/setup-vps.sh),
+# поэтому hook может fetch'ить свежий код напрямую.
 #
 # spec:08-deploy.md#q4 — bare repo + post-receive hook
 # spec:08-deploy.md#q13 — нестандартный порт (опционально)
 
 set -euo pipefail
 
-# v0.3.0: WORK_DIR по умолчанию в $HOME. Можно переопределить через env
-# (HABITSTRACKER_WORK_DIR), если bare-repo и work tree живут в /srv и /opt.
+# v0.3.0: WORK_DIR по умолчанию в $HOME. Можно переопределить через env.
 WORK_DIR="${HABITSTRACKER_WORK_DIR:-$HOME/opt/habitstracker}"
+BARE_DIR="${HABITSTRACKER_BARE_DIR:-$HOME/srv/habitstracker.git}"
 BRANCH="main"
 
-echo "▶ post-receive: deploy started"
+echo "▶ post-receive: deploy started at $(date -Is)"
 
-# 1. Checkout.
-echo "  - git checkout -f $BRANCH"
-GIT_WORK_TREE="$WORK_DIR" git checkout -f "$BRANCH"
+# 1. Тянем свежий код из GitHub в bare-repo
+echo "  - git fetch origin $BRANCH"
+GIT_DIR="$BARE_DIR" git fetch origin "$BRANCH"
+
+# 2. Обновляем work tree (force checkout, ибо bare-repo знает актуальный коммит)
+echo "  - git checkout -f origin/$BRANCH in $WORK_DIR"
+GIT_WORK_TREE="$WORK_DIR" git --git-dir="$BARE_DIR" checkout -f "origin/$BRANCH"
 GIT_WORK_TREE="$WORK_DIR" git -C "$WORK_DIR" clean -fd
 GIT_WORK_TREE="$WORK_DIR" git -C "$WORK_DIR" reset --hard "origin/$BRANCH"
 
-# 2. Rebuild + restart.
+# 3. Rebuild + restart
 cd "$WORK_DIR"
 if [ -f .env ]; then
   set -- docker compose -f docker-compose.deploy.yml --env-file .env
@@ -29,8 +35,8 @@ else
 fi
 
 echo "  - docker compose build"
-"$@" build
+"$@" build 2>&1 | tail -10
 echo "  - docker compose up -d"
-"$@" up -d
+"$@" up -d 2>&1 | tail -10
 
-echo "✅ post-receive: deploy finished"
+echo "✅ post-receive: deploy finished at $(date -Is)"

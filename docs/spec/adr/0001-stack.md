@@ -3,7 +3,7 @@
 > **status:** accepted
 > **date:** 2026-07-30
 > **last_updated:** 2026-08-01
-> **spec_version:** 0.3.0
+> **spec_version:** 0.3.1
 
 ## Context
 

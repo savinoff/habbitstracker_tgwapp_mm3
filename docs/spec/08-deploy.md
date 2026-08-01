@@ -1,6 +1,6 @@
 # 08. Deploy
 
-> **spec_version:** 0.3.0
+> **spec_version:** 0.3.1
 > **status:** draft
 > **last_updated:** 2026-08-01
 
@@ -289,3 +289,82 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw reload
 ```
+
+## q14. Deploy workflow (v0.3.0)
+
+### Три способа задеплоить
+
+**A. `scripts/redeploy.sh` (ручной, рекомендуемый для разработки)**
+
+На сервере, в work tree:
+```sh
+cd ~/opt/habitstracker
+~/opt/habitstracker/scripts/redeploy.sh            # деплой из main
+~/opt/habitstracker/scripts/redeploy.sh --branch=feat/xxx
+~/opt/habitstracker/scripts/redeploy.sh --no-build  # только рестарт
+~/opt/habitstracker/scripts/redeploy.sh --logs      # показать логи после
+```
+
+Что делает:
+1. `git fetch origin` (или указанная ветка).
+2. `git reset --hard origin/<branch>`.
+3. `docker compose build` (если не `--no-build`).
+4. `docker compose up -d`.
+5. Ждёт 30 сек, проверяет `/api/health`.
+
+**B. `git push vps main` (через bare-repo + post-receive hook)**
+
+Локально, на ноуте:
+```sh
+git remote add vps ssh://dim@f.xdvs.ru/srv/habitstracker
+git push vps main
+```
+
+Что происходит:
+1. Push в bare-repo на сервере.
+2. Срабатывает `hooks/post-receive` (см. q4).
+3. Hook делает `git fetch origin main` (bare-repo знает про GitHub).
+4. Hook обновляет work tree в `~/opt/habitstracker`.
+5. Hook запускает `docker compose build && up -d`.
+
+**C. GitHub webhook → VPS (для будущего v0.4.0)**
+
+GitHub шлёт POST на `https://f.xdvs.ru:8443/webhook/github` при push в main.
+VPS ловит, делает fetch + redeploy. Сейчас **не реализовано** (лишний attack surface,
+для single-user — overkill).
+
+### Структура git-репо на сервере
+
+```
+~/srv/habitstracker.git   ← bare-repo
+   └─ origin = https://github.com/savinoff/habbitstracker_tgwapp_mm3.git
+   └─ hooks/post-receive   ← авто-deploy
+
+~/opt/habitstracker       ← work tree
+   └─ origin = ~/srv/habitstracker.git  (bare)
+   └─ для pull из GitHub: scripts/redeploy.sh (временно переключает origin)
+```
+
+`setup-vps.sh` настраивает обе структуры. `origin` для work tree указывает на
+bare-repo, а `origin` для **bare-repo** указывает на GitHub. Это позволяет
+post-receive hook'у тянуть свежий код из GitHub после каждого push.
+
+### Когда использовать какой способ
+
+| Способ | Когда |
+|---|---|
+| `redeploy.sh` | Разработка, частые итерации, тестовые ветки |
+| `git push vps main` | Деплой из ноута после merged PR в main |
+| GitHub webhook | (Будущее) Полная автоматика без участия пользователя |
+
+### Откат
+
+```sh
+# Откатить на предыдущий коммит (временно, до следующего redeploy):
+cd ~/opt/habitstracker
+git log --oneline -5          # найти нужный коммит
+git reset --hard <commit-hash>
+docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
+```
+
+Для постоянного отката — откатить PR на GitHub, потом `redeploy.sh --branch=main`.
