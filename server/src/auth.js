@@ -106,6 +106,19 @@ export function validateInitData(raw, botToken, opts = {}) {
   const secretKey = createHash('sha256').update(botToken).digest();
   const computed = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
   if (!safeEqualHex(computed, hash)) {
+    // DEBUG (v0.3.2): пишем метрики чтобы понять что не сходится в проде.
+    // Никаких user-данных, только длины и hash-префиксы.
+    process.stderr.write(JSON.stringify({
+      level: 40,
+      code: 'BAD_SIGNATURE_DEBUG',
+      rawLen: raw.length,
+      hashLen: hash.length,
+      dcsLen: dataCheckString.length,
+      computedPrefix: computed.slice(0, 16),
+      expectedPrefix: hash.slice(0, 16),
+      dcsPrefix: dataCheckString.slice(0, 120),
+      dcsSuffix: dataCheckString.slice(-120),
+    }) + '\n');
     throw new ValidationError('signature mismatch', 'BAD_SIGNATURE');
   }
 
