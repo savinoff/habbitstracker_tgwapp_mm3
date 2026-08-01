@@ -22,7 +22,7 @@ import { createHash, createHmac } from 'node:crypto';
 process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'TEST_BOT_TOKEN';
 process.env.OWNER_TELEGRAM_ID = process.env.OWNER_TELEGRAM_ID || '777';
 
-const { validateInitData, buildDataCheckString, ValidationError } = await import('../server/src/auth.js');
+const { validateInitData, ValidationError } = await import('../server/src/auth.js');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OWNER_ID = Number(process.env.OWNER_TELEGRAM_ID);
@@ -64,15 +64,25 @@ function expectOk(fn, label, predicate) {
 /**
  * Строит initData + хеш по алгоритму Telegram, идентичному спецификации.
  * Принимает объект полей (без hash) и фиксированный botToken.
+ * Telegram считает data_check_string по **raw** URL-encoded форме полей,
+ * поэтому не получится собрать initData через URLSearchParams.toString()
+ * (он перекодирует значения). Вместо этого склеиваем руками: encodeURIComponent
+ * для каждого значения, потом фильтруем hash, сортируем по ключу.
  */
 function buildInitData(fields) {
-  const entries = Object.entries(fields);
-  // data_check_string строится по сортировке ключей.
-  const dataCheckString = buildDataCheckString(entries);
+  // 1. Собираем raw строку без hash — точно так, как это делает Telegram WebApp.
+  const parts = Object.entries(fields)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
+  // 2. data_check_string по алгоритму Telegram: фильтр hash + сортировка по ключу.
+  const dataCheckString = parts
+    .split('&')
+    .filter((p) => !p.startsWith('hash='))
+    .sort()
+    .join('\n');
   const secretKey = createHash('sha256').update(BOT_TOKEN).digest();
   const hash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-  const all = [...entries, ['hash', hash]];
-  return new URLSearchParams(all).toString();
+  return `${parts}&hash=${hash}`;
 }
 
 const user = { id: OWNER_ID, first_name: 'Test', username: 'tester' };

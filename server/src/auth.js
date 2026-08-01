@@ -11,8 +11,9 @@ const MAX_USER_OBJ_BYTES = 4096;
 
 /**
  * Парсит initData (query-string) в массив пар [key, value].
- * Сохраняет порядок параметров как в оригинале (нужен для совместимости,
- * хотя в data_check_string порядок задаётся сортировкой по ключу).
+ * Значения возвращаются **декодированными** (URL-decoded) — для удобства
+ * дальнейшей работы с `user` (JSON.parse) и проверки наличия полей.
+ * Для data_check_string этого недостаточно: там нужна **raw** форма, см. buildDataCheckString.
  */
 export function parseInitData(raw) {
   if (typeof raw !== 'string' || raw.length === 0) {
@@ -32,16 +33,32 @@ export function parseInitData(raw) {
 
 /**
  * Собирает data_check_string по алгоритму Telegram:
- *  - все поля кроме hash
+ *  - все поля кроме hash и signature
  *  - отсортированы по ключу
- *  - формат: key=value (raw, без url-decode промежуточного)
+ *  - формат: key=value в **raw** URL-encoded форме
  *  - объединены \n
+ *
+ * Принимает **исходную строку** initData, а не распарсенные entries.
+ * Это критично: если пары пересобрать через URLSearchParams + key=value,
+ * Telegram декодирует значения (например `https%3A%5C%2F` → `https:\/`)
+ * и хеш перестаёт совпадать с присланным.
+ *
+ * spec:07-non-functional.md#q3 — оба поля (hash и signature) исключены.
+ *   `hash` — это сама подпись, мы её проверяем отдельно.
+ *   `signature` — клиентская подпись для Bot API, в HMAC не участвует.
  */
-export function buildDataCheckString(entries) {
-  return entries
-    .filter(([k]) => k !== 'hash')
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([k, v]) => `${k}=${v}`)
+export function buildDataCheckString(raw) {
+  if (typeof raw !== 'string' || raw.length === 0) {
+    throw new ValidationError('initData is empty', 'EMPTY');
+  }
+  return raw
+    .split('&')
+    .filter((pair) => {
+      const eq = pair.indexOf('=');
+      const key = eq === -1 ? pair : pair.slice(0, eq);
+      return key !== 'hash' && key !== 'signature';
+    })
+    .sort()
     .join('\n');
 }
 
@@ -84,7 +101,8 @@ export function validateInitData(raw, botToken, opts = {}) {
   if (!user) throw new ValidationError('user missing', 'NO_USER');
 
   // 1. Подпись.
-  const dataCheckString = buildDataCheckString(entries);
+  // buildDataCheckString получает raw строку чтобы сохранить URL-encoded форму полей.
+  const dataCheckString = buildDataCheckString(raw);
   const secretKey = createHash('sha256').update(botToken).digest();
   const computed = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
   if (!safeEqualHex(computed, hash)) {

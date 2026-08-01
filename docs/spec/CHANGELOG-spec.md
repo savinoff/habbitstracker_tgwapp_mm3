@@ -2,6 +2,18 @@
 
 Все значимые изменения в `docs/spec/`. Формат вдохновлён [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.2] — 2026-08-01
+
+### Fixed
+- **07-non-functional.md#q3** — `data_check_string` теперь строится по **raw**
+  URL-encoded форме полей из initData. Раньше `server/src/auth.js` парсил
+  initData через `URLSearchParams` (который декодирует значения) и собирал
+  обратно — `user` поле вроде `{"photo_url":"https%3A%5C%2F%5C%2Ft.me..."}`
+  превращалось в `{"photo_url":"https:\/\/t.me..."}`, и HMAC переставал
+  совпадать с присланным `hash` (симптом: `BAD_SIGNATURE` при живом initData).
+  Также добавлено исключение `signature` из `data_check_string` — на
+  случай если Telegram Mini App его присылает вместе с `hash`.
+
 ## [0.3.1] — 2026-08-01
 
 ### Added

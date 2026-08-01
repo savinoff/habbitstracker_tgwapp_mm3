@@ -2,7 +2,7 @@
 
 Telegram Mini App — личный трекер привычек. Два опроса в день (утро + вечер), напоминания от бота, история, всё на своём VPS, никаких внешних сервисов.
 
-![spec](https://img.shields.io/badge/spec-0.3.1-blue)
+![spec](https://img.shields.io/badge/spec-0.3.2-blue)
 ![status](https://img.shields.io/badge/license-MIT-green)
 ![status](https://img.shields.io/badge/deployed-2026--08--01-brightgreen)
 
