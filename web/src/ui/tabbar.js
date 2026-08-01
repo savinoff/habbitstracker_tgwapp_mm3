@@ -27,3 +27,14 @@ export function currentTab() {
   const active = document.querySelector('.tab[aria-selected="true"]');
   return active?.dataset.tab || 'home';
 }
+
+// spec:09-multi-user.md#q8, q9 — скрыть/показать tab bar
+// (для onboarding и 403-экранов таб-бар не нужен).
+export function hideTabbar() {
+  const tabbar = document.getElementById('tabbar');
+  if (tabbar) tabbar.style.display = 'none';
+}
+export function showTabbar() {
+  const tabbar = document.getElementById('tabbar');
+  if (tabbar) tabbar.style.display = '';
+}

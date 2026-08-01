@@ -93,3 +93,17 @@ export function saveEveningSurvey(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+// v0.4.0+ — /api/users/* (профиль и настройки, см. 05-api.md#q12)
+export function getMe() {
+  return apiFetch('/api/users/me');
+}
+export function getMySettings() {
+  return apiFetch('/api/users/me/settings');
+}
+export function updateMySettings(payload) {
+  return apiFetch('/api/users/me/settings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

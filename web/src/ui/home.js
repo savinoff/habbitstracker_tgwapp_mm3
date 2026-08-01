@@ -28,7 +28,7 @@ function currentHour(tz) {
 function inMorningWindow(hour) { return hour >= 4 && hour < 12; }
 function inEveningWindow(hour) { return hour >= 18 && hour < 24; }
 
-export async function renderHome(screen) {
+export async function renderHome(screen, user) {
   screen.innerHTML = `<div class="screen__placeholder"><p>Загружаю…</p></div>`;
   let tz = TZ_FALLBACK;
   let today;
@@ -46,6 +46,16 @@ export async function renderHome(screen) {
   today = localToday(tz);
   const todayEntry = history.find((d) => d.date === today) || { morning: null, evening: null };
   const hour = currentHour(tz);
+
+  // v0.4.0+: имя пользователя в шапке.
+  if (user?.first_name) {
+    const existingGreeting = screen.querySelector('.home__greeting');
+    if (existingGreeting) existingGreeting.remove();
+    const greeting = document.createElement('div');
+    greeting.className = 'home__greeting';
+    greeting.textContent = `Привет, ${user.first_name}!`;
+    screen.insertBefore(greeting, screen.firstChild);
+  }
 
   // Сценарий 1: утро.
   if (inMorningWindow(hour)) {
