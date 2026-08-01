@@ -60,6 +60,9 @@ const build = async () => {
   // ВАЖНО: регистрируем ПОСЛЕ всех API-роутов, чтобы /api/* не уходил в static.
   // Static-файлы отдаются с cache-control: immutable, чтобы Telegram WebView
   // не делал лишних запросов.
+  //
+  // SPA-fallback — сами регистрируем setNotFoundHandler (v7 не делает это сам):
+  // для /api/* отдаём JSON 404, для всего остального — index.html.
   if (config.staticDir && existsSync(config.staticDir)) {
     await app.register(fastifyStatic, {
       root: pathResolve(config.staticDir),
@@ -68,20 +71,17 @@ const build = async () => {
       cacheControl: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 дней
       immutable: true,
-      decorateReply: false,
     });
 
-    // SPA fallback: GET на любой не-/api путь, которого нет в static,
-    // отдаёт index.html (для клиентского роутинга /history, /settings).
+    // SPA fallback: для любого GET, который не /api/* и не нашёлся в static,
+    // отдаём index.html. Регистрируется ПОСЛЕ static, поэтому static успевает
+    // обработать реальные файлы раньше.
     app.setNotFoundHandler((req, reply) => {
-      const accept = req.headers.accept || '';
-      // /api/* и запросы с Accept: application/json — обычный 404 JSON.
-      if (req.url.startsWith('/api/') || accept.includes('application/json')) {
+      if (req.url.startsWith('/api/')) {
         return reply.code(404).send({
           error: { code: 'NOT_FOUND', message: `Route not found: ${req.method} ${req.url}` },
         });
       }
-      // Иначе — SPA index.html.
       return reply.sendFile('index.html');
     });
 
