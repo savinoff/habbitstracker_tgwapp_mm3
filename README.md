@@ -62,27 +62,32 @@ docker compose up -d
    systemctl enable --now docker
    ```
 
-2. **Склонируй репо и настрой bare-repo** (один раз):
+2. **Склонируй репо и настрой bare-repo** (один раз, **под обычным пользователем**):
    ```sh
-   sudo /opt/habitstracker/scripts/setup-vps.sh
-   # впиши TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, APP_BASE_URL, CADDY_EMAIL, WEBHOOK_URL в /opt/habitstracker/.env
+   # bare-repo в ~/srv, work tree в ~/opt — без sudo
+   git clone --bare https://github.com/savinoff/habbitstracker_tgwapp_mm3.git ~/srv/habitstracker.git
+   git clone ~/srv/habitstracker.git ~/opt/habitstracker
+   # впиши TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, APP_BASE_URL, CADDY_EMAIL, WEBHOOK_URL в ~/opt/habitstracker/.env
    ```
 
-3. **Установи ежедневный бэкап**:
+3. **Установи ежедневный бэкап** (если есть root-доступ):
    ```sh
    sudo apt install -y sqlite3 cron
-   sudo /opt/habitstracker/scripts/install-backup-cron.sh
+   bash ~/opt/habitstracker/scripts/install-backup-cron.sh
    ```
 
-4. **Деплой через `git push`**:
+4. **Деплой** (с ноута через SSH):
    ```sh
-   # локально:
-   git remote add vps ssh://user@vps.example/srv/habitstracker
-   git push vps main
-   # на VPS автоматически: checkout → build → up -d
+   # на сервере (после клонирования)
+   cd ~/opt/habitstracker
+   docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
    ```
 
-5. **HTTPS — из коробки.** Caddy 2 поднимается в отдельном контейнере, при первом старте получает Let's Encrypt-сертификат для `APP_BASE_URL` (нужны DNS A-record и открытые 80/443 на VPS) и сам его обновляет. Никаких certbot-хуков.
+5. **HTTPS — из коробки.** Caddy 2 поднимается в отдельном контейнере, при первом старте получает Let's Encrypt-сертификат для `APP_BASE_URL` (нужны DNS A-record и открытые 80 на VPS) и сам его обновляет. Никаких certbot-хуков.
+
+6. **Если 443 на VPS занят** (X-UI, Outline и т.п.) — Caddy работает на `8443:443`.
+   В `APP_BASE_URL` укажи `https://your-domain:8443` (с портом). Подробнее —
+   [08-deploy.md#q13](docs/spec/08-deploy.md#q13).
 
 ## Спецификация
 

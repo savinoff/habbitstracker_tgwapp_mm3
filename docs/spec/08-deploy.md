@@ -1,22 +1,25 @@
 # 08. Deploy
 
-> **spec_version:** 0.2.0
+> **spec_version:** 0.3.0
 > **status:** draft
-> **last_updated:** 2026-07-31
+> **last_updated:** 2026-08-01
 
 ## q1. Целевая среда
 
-- VPS пользователя (Ubuntu 22.04 или Debian 12).
+- VPS пользователя (Ubuntu 22.04+ или Debian 12+).
 - Docker + Docker Compose Plugin установлены.
 - Portainer установлен и доступен (управление стэками).
 - Домен привязан к IP VPS, A-запись указывает на сервер.
 - TLS-сертификат — Let's Encrypt, выдаётся и обновляется автоматически (Caddy).
+- **v0.3.0:** Если на хосте уже занят порт 443 другим сервисом (например, X-UI,
+  Outline, nginx от провайдера) — Caddy работает на нестандартном внешнем
+  порту `8443` (внутри контейнера — стандартный 443). Подробнее в q13.
 
 ## q2. Архитектура
 
 ```
    Internet
-      │  HTTPS (TCP 80/443)
+      │  HTTPS (TCP 80, 8443* или 443**)
       ▼
  ┌────────────┐
  │   Caddy    │  (контейнер caddy:2-alpine, ACME + reverse proxy)
@@ -33,6 +36,11 @@
                           /var/backups/habitstracker/  ← cron
 ```
 
+\* **v0.3.0:** Внешний порт `8443` (вместо 443) — для случая, когда 443 на хосте
+уже занят другим сервисом (X-UI, Outline, провайдерский nginx).
+Внутри контейнера Caddy слушает на стандартном 443.
+\** Если 443 на хосте свободен — проброс идёт `443:443` (поведение v0.2.0).
+
 Два сервиса в `docker-compose.deploy.yml`:
 - `caddy` — reverse proxy + ACME (Let's Encrypt) + раздача web/dist через проксирование на api.
 - `api` — Node Fastify приложение, обслуживает и статику, и API.
@@ -45,12 +53,18 @@
 |---|---|---|
 | `/var/lib/habitstracker` | `habits.db` + `habits.db-wal` + `habits.db-shm` | данные |
 | `/var/backups/habitstracker` | `habits-YYYY-MM-DD.db` | бэкапы |
-| `/srv/habitstracker` | bare git repo | деплой |
-| `/opt/habitstracker` | work tree с checkout'ом | деплой |
+| `~/srv/habitstracker.git` | bare git repo | деплой |
+| `~/opt/habitstracker` | work tree с checkout'ом | деплой |
+| `~/backups` (опционально) | локальные бэкапы если нет доступа к `/var/backups` | бэкапы |
 | `caddy_data` (named volume) | `/data` внутри контейнера Caddy — сертификаты, конфиг | ACME state |
 | `caddy_config` (named volume) | `/config` внутри контейнера Caddy | admin API state |
 
 В `docker-compose.deploy.yml` бинд-маунты `/var/lib` и `/var/backups` примонтированы к api. Caddy-сертификаты лежат в named volume `caddy_data` (не в git, не в репозитории).
+
+**v0.3.0:** Каталоги bare-repo и work tree по умолчанию лежат в `~` пользователя
+(не `/srv` / `/opt`). Это снимает требование sudo для деплоя. Если у пользователя
+есть root-доступ и хочется держать репо в `/srv/habitstracker.git` — это допустимо,
+но не обязательно. Скрипты `setup-vps.sh` / `post-receive` ищут `~/srv` первым.
 
 ## q4. Деплой по git push
 
@@ -136,7 +150,10 @@ Cron на хосте (не в контейнере):
 ```
 TELEGRAM_BOT_TOKEN=...           # от @BotFather
 OWNER_TELEGRAM_ID=...            # ваш telegram id (число)
-APP_BASE_URL=https://your-domain # FQDN, должен совпадать с ACME-сертификатом
+APP_BASE_URL=https://your-domain # FQDN, должен совпадать с ACME-сертификатом.
+                                 # v0.3.0: если Caddy на нестандартном порту 8443,
+                                 # APP_BASE_URL ДОЛЖЕН включать порт:
+                                 # APP_BASE_URL=https://your-domain:8443
 WEBHOOK_URL=https://your-domain/webhook/telegram # опционально, для webhook-режима бота
 TZ=UTC                           # TZ контейнера (для логов)
 CADDY_EMAIL=you@example.com      # email для ACME-регистрации (уведомления о сроке)
@@ -152,7 +169,15 @@ TZ=UTC
 CADDY_EMAIL=
 ```
 
-**Важно:** Caddyfile ссылается на домен через `{$APP_BASE_URL}` или прямой FQDN, заданный в `Caddyfile`. На MVP домен жёстко прописан в `Caddyfile` — смена домена требует изменения Caddyfile и пересборки. Альтернатива: использовать шаблон Caddyfile с подстановкой `${APP_BASE_URL}` через `envsubst` — добавим, если потребуется.
+**Важно:** Caddyfile получает домен через `{$APP_BASE_URL}` (envsubst в entrypoint).
+Смена домена не требует пересборки образа — достаточно перезапустить контейнер
+(`docker compose up -d`). Это поведение v0.2.0 (шаблон Caddyfile + envsubst),
+сохраняется в v0.3.0.
+
+**v0.3.0:** `APP_BASE_URL` теперь **влияет** на `docker-compose.deploy.yml`
+через переменную `APP_BASE_URL` (опционально, для автоматического выбора
+проброса порта — см. q13). На MVP `docker-compose.deploy.yml` пробрасывает
+`8443:443` всегда, а `APP_BASE_URL` указывает на полный URL с портом.
 
 ## q10. Health-check
 
@@ -163,19 +188,27 @@ CADDY_EMAIL=
 
 ## q11. Caddyfile
 
-Файл `nginx/Caddyfile` (NB: имя каталога сохранено для совместимости с историей, но содержит Caddyfile):
+Файл `caddy/Caddyfile.tpl` (шаблон, подстановка через `envsubst` в entrypoint):
 ```
+{
+	email {$CADDY_EMAIL}
+}
+
 {$APP_BASE_URL} {
-  encode zstd gzip
-  reverse_proxy api:3000
+	encode zstd gzip
+	reverse_proxy api:3000
 }
 ```
 
 Caddy при старте автоматически:
 - ACME-регистрация через Let's Encrypt (email из `CADDY_EMAIL`).
-- Получает сертификат для `APP_BASE_URL`.
+- Получает сертификат для хоста из `APP_BASE_URL` (FQDN без протокола, порт не нужен — порт относится к сетевому слою, не к сертификату).
 - Обновляет его автоматически (cron внутри Caddy).
 - Проксирует весь трафик на api:3000.
+
+**v0.3.0:** `APP_BASE_URL` парсится в entrypoint.sh: протокол `https://` и trailing
+slash отрезаются, остаётся только FQDN. Порт `:8443` (если есть) отрезается для
+Caddyfile, но сохраняется в `APP_BASE_URL` для использования ботом и webhook'ом.
 
 ## q12. Связанные секции
 
@@ -183,3 +216,76 @@ Caddy при старте автоматически:
 - `07-non-functional.md#q7` — секреты.
 - `00-vision.md#q9` — общая структура репо.
 - `adr/0001-stack.md` — выбор Caddy как reverse proxy.
+
+## q13. Нестандартный внешний порт (v0.3.0)
+
+### Зачем
+
+В некоторых средах порт 443 на хосте уже занят — например:
+- X-UI / 3x-ui (панель для Xray/VLESS/VMess прокси).
+- Outline Shadowbox (VPN).
+- Провайдерский nginx для control panel.
+- Другой web-сервис пользователя.
+
+Убивать чужой процесс нельзя. Решение — пробросить **Caddy** на нестандартный
+порт снаружи (`8443`), а **внутри контейнера** оставить стандартный 443.
+
+### Как это работает
+
+`docker-compose.deploy.yml`:
+```yaml
+  caddy:
+    ports:
+      - "80:80"      # для ACME HTTP-01 challenge
+      - "8443:443"   # Caddy слушает 443 внутри, наружу — 8443
+```
+
+### ACME через HTTP-01
+
+Caddy при получении сертификата делает HTTP-01 challenge через порт 80:
+- Let's Encrypt шлёт запрос на `http://<host>/.well-known/acme-challenge/<token>`.
+- Порт 80 пробрасывается (`80:80`) — challenge проходит.
+- Сертификат выдаётся на **FQDN без порта** (`:8443` к сертификату отношения не имеет).
+
+То есть для ACME:
+- Caddyfile: `<host>` (без `:8443`).
+- Сертификат: на `<host>`.
+- URL приложения: `https://<host>:8443`.
+
+### Поведение в @BotFather
+
+URL Mini App в @BotFather: `https://f.xdvs.ru:8443` (с портом).
+
+Telegram принимает URL с портом в Bot API. Mini App открывается в WebView
+Telegram-клиента, который поддерживает нестандартные порты. На 2026 год
+работает в iOS/Android/Desktop. Старые версии клиентов (до 2024) могут
+не открыть — но это редкость.
+
+### Альтернативы (не реализованы в v0.3.0)
+
+- **Cloudflare в front.** Перенести NS-записи на Cloudflare, включить
+  проксирование (оранжевое облачко), SSL/TLS → Flexible. Тогда 443 не
+  нужен, Caddy слушает только 80, Cloudflare выдаёт универсальный сертификат.
+  Trade-off: трафик идёт через Cloudflare (задержка ~20-50 мс).
+- **X-UI inbound → Caddy.** Настроить в X-UI проксирование с 443 на
+  `127.0.0.1:8443` (Caddy). Тогда URL остаётся стандартный `https://f.xdvs.ru`,
+  X-UI терминирует TLS. Trade-off: больше конфигурации, X-UI должен поддерживать
+  ACME или иметь свой валидный сертификат.
+
+### Диагностика
+
+Если сертификат Let's Encrypt не получен:
+```sh
+docker logs habitstracker-caddy 2>&1 | grep -iE "(certificate|acme|challenge|error)"
+# Типичные ошибки:
+#  - "port 80 is not accessible" — UFW блокирует 80
+#  - "DNS problem" — A-запись не указывает на IP
+#  - "rate limit" — слишком много попыток за последний час
+```
+
+Если ошибка в UFW:
+```sh
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw reload
+```

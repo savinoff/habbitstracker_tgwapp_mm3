@@ -3,10 +3,13 @@
 # Срабатывает после git push в bare-репо. Делает checkout + rebuild + restart.
 #
 # spec:08-deploy.md#q4 — bare repo + post-receive hook
+# spec:08-deploy.md#q13 — нестандартный порт (опционально)
 
 set -euo pipefail
 
-WORK_DIR="/opt/habitstracker"
+# v0.3.0: WORK_DIR по умолчанию в $HOME. Можно переопределить через env
+# (HABITSTRACKER_WORK_DIR), если bare-repo и work tree живут в /srv и /opt.
+WORK_DIR="${HABITSTRACKER_WORK_DIR:-$HOME/opt/habitstracker}"
 BRANCH="main"
 
 echo "▶ post-receive: deploy started"

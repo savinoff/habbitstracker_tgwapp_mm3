@@ -2,6 +2,34 @@
 
 Все значимые изменения в `docs/spec/`. Формат вдохновлён [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.0] — 2026-08-01
+
+### Changed
+- **08-deploy.md: Caddy может работать на нестандартном внешнем порту 8443.**
+  Это нужно, когда 443 на хосте уже занят другим сервисом (X-UI, Outline,
+  провайдерский nginx). Caddy внутри контейнера по-прежнему слушает 443,
+  но наружу пробрасывается на 8443.
+- **08-deploy.md: каталоги bare-repo и work tree по умолчанию в `~`**
+  (`~/srv/habitstracker.git`, `~/opt/habitstracker`) — снимает требование
+  sudo для деплоя. Если есть root — `/srv` и `/opt` тоже допустимы.
+- **`docker-compose.deploy.yml`:** `ports: 443:443` → `8443:443`. ACME
+  HTTP-01 challenge через 80 продолжает работать.
+
+### Added
+- **08-deploy.md: q13** — новый раздел про нестандартный порт: как работает
+  ACME, что писать в `APP_BASE_URL`, как настроить @BotFather, диагностика.
+- **08-deploy.md: альтернативы** — Cloudflare в front, X-UI inbound → Caddy.
+- **`.env.example`:** примечание про `APP_BASE_URL` с портом `:8443`.
+
+### Fixed
+- (none)
+
+### Removed
+- (none)
+
+### Security
+- (unchanged from 0.2.0)
+
 ## [0.2.0] — 2026-07-31
 
 ### Changed
