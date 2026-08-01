@@ -82,9 +82,22 @@ if [ -d "$WORK_DIR/.git" ]; then
 else
   echo "→ Cloning into $WORK_DIR"
   mkdir -p "$(dirname "$WORK_DIR")"
+  # spec:08-deploy.md#q3 — work tree is a clone of the bare-repo,
+  # bare-repo's origin is GitHub. This way, post-receive hook on the
+  # bare-repo can fetch fresh code from GitHub on every push.
   git clone "$BARE_DIR" "$WORK_DIR"
   git -C "$WORK_DIR" checkout "$BRANCH"
+  # Work tree's origin = bare-repo. To pull fresh code from GitHub,
+  # use scripts/redeploy.sh (which temporarily switches origin to GitHub).
 fi
+
+# Настроим origin bare-repo → GitHub, чтобы post-receive hook мог
+# fetch'ить свежий код после каждого push.
+echo "→ Setting bare-repo origin to $REPO_URL"
+git -C "$BARE_DIR" remote remove origin 2>/dev/null || true
+git -C "$BARE_DIR" remote add origin "$REPO_URL"
+git -C "$BARE_DIR" fetch origin "$BRANCH" 2>&1 | tail -2
+git -C "$BARE_DIR" branch --set-upstream-to="origin/$BRANCH" "$BRANCH" 2>/dev/null || true
 
 # ─── 4. .env example ───
 if [ ! -f "$WORK_DIR/.env" ] && [ -f "$WORK_DIR/.env.example" ]; then

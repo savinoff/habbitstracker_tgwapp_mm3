@@ -80,8 +80,18 @@ docker compose up -d
    ```sh
    # на сервере (после клонирования)
    cd ~/opt/habitstracker
-   docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
+   bash scripts/redeploy.sh            # деплой из main
+   # или:
+   bash scripts/redeploy.sh --branch=feat/xxx
+   bash scripts/redeploy.sh --no-build  # только рестарт без пересборки
+   bash scripts/redeploy.sh --logs      # показать логи после
+   bash scripts/redeploy.sh --help      # все опции
    ```
+
+   **Альтернатива:** настроить bare-repo + post-receive hook, тогда деплой
+   через `git push vps main` с ноута. Скрипт `setup-vps.sh` настраивает
+   bare-repo с `origin = GitHub`, hook автоматически подтягивает свежий код
+   и перезапускает контейнеры. Подробнее — [08-deploy.md#q14](docs/spec/08-deploy.md#q14).
 
 5. **HTTPS — из коробки.** Caddy 2 поднимается в отдельном контейнере, при первом старте получает Let's Encrypt-сертификат для `APP_BASE_URL` (нужны DNS A-record и открытые 80 на VPS) и сам его обновляет. Никаких certbot-хуков.
 
