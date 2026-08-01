@@ -2,7 +2,52 @@
 
 Все значимые изменения в `docs/spec/`. Формат вдохновлён [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.4] — 2026-08-01 — 🎉 **ПЕРВАЯ РАБОЧАЯ ВЕРСИЯ В ПРОДЕ**
+
+Mini App `HabitsTracker` заработала end-to-end в реальном Telegram WebView.
+Форма утреннего опроса загружается у @DimSav в Telegram, `/api/morning/today`
+отдаёт 200, HMAC валидация проходит, SPA fallback работает
+(Caddy 8443 → Fastify:3000 → web/dist).
+
+### Fixed (финальный правильный HMAC)
+- **07-non-functional.md#q3** — `secret_key` правильно вычисляется как
+  `HMAC-SHA256(key="WebAppData", msg=BOT_TOKEN)`. До этого **три недели** в
+  проде `BAD_SIGNATURE` ломал каждый запрос, но тесты молчали: и
+  `test-initdata.js`, и `auth.js` использовали одну и ту же сломанную формулу
+  (`sha256(BOT_TOKEN)`), и тест проходил по «равенству двух одинаково кривых
+  реализаций». Канонический алгоритм — по [официальной спеке](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app) и 10+ рабочим реализациям на StackOverflow.
+- **`data_check_string` строится через `URLSearchParams`** (URL-decoded
+  значения), `signature` НЕ фильтруется (он для third-party Ed25519,
+  HMAC-проверке не нужен). Это **откат** PR #38 (где был raw-формат) — он
+  оказался неправильным, несмотря на интуитивно «логичную» аргументацию.
+
+### Уроки (тоже в changelog, чтоб не повторять)
+- **Тесты должны проверять на НАСТОЯЩИХ данных, а не на синтетике, которую
+  сами же сгенерили.** Сломанные HMAC-формулы совпадают только между собой.
+- **Debug-логи в проде** (даже временные) окупаются за минуты — без
+  `BAD_SIGNATURE_DEBUG` с `rawLen/dcsPrefix/computedPrefix` мы бы неделю
+  гадали почему hash не сходится.
+- **Всегда читать официальную спеку** (`https://core.telegram.org/bots/webapps#validating-data`)
+  а не «интуитивно правильную» интерпретацию.
+
+### Убрано
+- Debug-ветки `debug/log-initdata`, `debug/bad-signature-logs` — удалены
+  локально и с origin.
+- 19+ локальных `feat/*` `docs/*` `fix/*` веток (были смёржены через
+  squash-rebase) — почищены, остался только `main`.
+
+## [0.3.3] — 2026-08-01
+
+### Fixed
+- **07-non-functional.md#q3** — `secret_key` = `HMAC-SHA256("WebAppData", bot_token)`
+  (вместо `sha256(bot_token)`). Главная причина `BAD_SIGNATURE` в проде.
+
 ## [0.3.2] — 2026-08-01
+
+### Fixed
+- **07-non-functional.md#q3** — `data_check_string` строится по **raw**
+  URL-encoded форме полей. **(ОТКАЗАНО в v0.3.4 — канонический алгоритм
+  использует URL-decoded значения, не raw.)**
 
 ### Fixed
 - **07-non-functional.md#q3** — `data_check_string` теперь строится по **raw**
