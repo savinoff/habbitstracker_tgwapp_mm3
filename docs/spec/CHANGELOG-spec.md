@@ -13,6 +13,12 @@
   совпадать с присланным `hash` (симптом: `BAD_SIGNATURE` при живом initData).
   Также добавлено исключение `signature` из `data_check_string` — на
   случай если Telegram Mini App его присылает вместе с `hash`.
+- **07-non-functional.md#q3** — **критичный фикс HMAC**: `secret_key` теперь
+  считается как `HMAC-SHA256(key="WebAppData", msg=BOT_TOKEN)`, а не
+  `sha256(BOT_TOKEN)`. До этого момента **все** валидации Telegram Mini App
+  в проде возвращали `BAD_SIGNATURE` — и тест в `test-initdata.js` проходил
+  только потому, что и тест, и прод-код использовали одинаково неправильную
+  формулу. Сейчас алгоритм совпадает с [официальной спекой](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app).
 
 ## [0.3.1] — 2026-08-01
 
