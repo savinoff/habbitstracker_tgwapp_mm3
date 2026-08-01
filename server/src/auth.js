@@ -127,11 +127,10 @@ export function validateInitData(raw, botToken, opts = {}) {
   }
 
   // 4. Whitelist.
-  if (ownerTelegramId !== undefined && ownerTelegramId !== null) {
-    if (Number(ownerTelegramId) !== userId) {
-      throw new ValidationError('user not in whitelist', 'NOT_OWNER');
-    }
-  }
+  // (v0.4.0+) Whitelist проверяется ОТДЕЛЬНО в plugins/auth.js через users.js
+  // (escape hatch через ownerTelegramId, иначе status из БД). Здесь — никаких
+  // проверок; возвращаем user как есть.
+  // Параметр ownerTelegramId оставлен в opts для обратной совместимости (тесты).
 
   return { user: { ...parsedUser, id: userId }, auth_date: authSec };
 }

@@ -138,13 +138,16 @@ expectThrows(
   'wrong botToken rejected',
 );
 
-// --- 6. Whitelist: user.id != OWNER_ID
+// --- 6. Whitelist переехал в plugins/auth.js. Тест на validateInitData
+//     (без whitelist) — user.id != OWNER_ID тоже OK на этом уровне.
+//     (NOT_APPROVED / NOT_REGISTERED / BANNED проверяются в test-auth.js,
+//     в этом PR — отдельный фокус).
 const otherFields = { ...goodFields, user: JSON.stringify({ ...user, id: 12345 }) };
 const otherRaw = buildInitData(otherFields);
-expectThrows(
-  () => validateInitData(otherRaw, BOT_TOKEN, { nowSec: NOW, ownerTelegramId: OWNER_ID }),
-  'NOT_OWNER',
-  'non-owner user rejected',
+expectOk(
+  () => validateInitData(otherRaw, BOT_TOKEN, { nowSec: NOW }),
+  'validateInitData: user with any id passes HMAC check',
+  (r) => r.user.id === 12345,
 );
 
 // --- 7. Пустой raw
@@ -188,10 +191,11 @@ expectThrows(
   'auth_date older than maxAgeSec rejected',
 );
 
-// --- 12. Whitelist не задан (ownerTelegramId = undefined) — пропускает любого
+// --- 12. Без ownerTelegramId — пропускает любого (тест на то, что validateInitData
+//      больше не делает whitelist, это переехало в plugins/auth.js).
 expectOk(
   () => validateInitData(goodRaw, BOT_TOKEN, { nowSec: NOW }),
-  'whitelist not enforced when ownerTelegramId is undefined',
+  'validateInitData: whitelist removed (handled in plugins/auth.js)',
   (r) => r.user.id === OWNER_ID,
 );
 
