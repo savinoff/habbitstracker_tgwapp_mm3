@@ -42,7 +42,12 @@ function makeMockBot() {
     fireText(msg) {
       // Возвращает Promise<void>, который ждёт ВСЕ обработчики.
       const tasks = [];
-      for (const th of textHandlers) if (th.re.test(msg.text)) tasks.push(th.h(msg));
+      for (const th of textHandlers) {
+        if (th.re.test(msg.text)) {
+          const m = th.re.exec(msg.text);
+          tasks.push(th.h(msg, m));
+        }
+      }
       for (const eh of (eventHandlers.message || [])) tasks.push(eh(msg));
       return Promise.all(tasks).then(() => {});
     },
@@ -60,9 +65,11 @@ const { registerHandlers } = await import('../server/src/bot/handlers.js');
 const { getSettingsForUser } = await import('../server/src/repos/settings.js');
 
 try {
-  // --- /start с APP_BASE_URL
+  // --- /start нового пользователя (v0.4.0+) — pending, без menu button.
   const bot1 = makeMockBot();
-  registerHandlers(bot1, { appBaseUrl: 'https://example.com', logger: { warn(){}, error(){} } });
+  const errs = [];
+  const noop = () => {};
+  registerHandlers(bot1, { appBaseUrl: 'https://example.com', logger: { warn: noop, info: noop, error(e){errs.push(e.err?.message || e.err || JSON.stringify(e));} } });
 
   await bot1.fireText({
     chat: { id: 555, type: 'private' },
@@ -70,33 +77,36 @@ try {
     text: '/start',
   });
 
-  if (bot1.calls.setChatMenuButton.length === 1) {
-    const [chatId, btn] = bot1.calls.setChatMenuButton[0];
-    if (chatId === 555 && btn.type === 'web_app' && btn.web_app.url === 'https://example.com') {
-      ok('/start: setChatMenuButton called with correct chat + url');
-    } else {
-      bad('/start setChatMenuButton', JSON.stringify(bot1.calls.setChatMenuButton[0]));
-    }
+  // Для pending-пользователя menu button НЕ ставится (нельзя открыть Mini App).
+  if (bot1.calls.setChatMenuButton.length === 0) {
+    ok('/start (new pending user): no menu button');
   } else {
-    bad('/start setChatMenuButton', `expected 1 call, got ${bot1.calls.setChatMenuButton.length}`);
+    bad('/start (new pending user) menu', `expected 0, got ${bot1.calls.setChatMenuButton.length}`);
   }
 
-  if (bot1.calls.sendMessage.length === 1) {
-    const [chatId, text, opts] = bot1.calls.sendMessage[0];
-    if (chatId === 555 && text.includes('Alice') && opts?.reply_markup?.inline_keyboard?.[0]?.[0]?.web_app?.url === 'https://example.com') {
-      ok('/start: sendMessage with greeting + inline web_app button');
+  // sendMessage: pending welcome + owner notification.
+  if (bot1.calls.sendMessage.length === 2) {
+    const [toUser, userText] = bot1.calls.sendMessage[0];
+    if (toUser === 555 && userText.includes('Заявка')) {
+      ok('/start (new pending user): user notified about pending');
     } else {
-      bad('/start sendMessage', JSON.stringify(bot1.calls.sendMessage[0]).slice(0, 200));
+      bad('/start (new pending user) text', JSON.stringify(bot1.calls.sendMessage[0]));
+    }
+    const [toOwner, ownerText] = bot1.calls.sendMessage[1];
+    if (toOwner === 777 && ownerText.includes('Новая заявка')) {
+      ok('/start (new pending user): owner notified');
+    } else {
+      bad('/start (new pending user) owner', JSON.stringify(bot1.calls.sendMessage[1]));
     }
   } else {
-    bad('/start sendMessage', `expected 1, got ${bot1.calls.sendMessage.length}`);
+    bad('/start (new pending user) count', `expected 2, got ${bot1.calls.sendMessage.length} — calls: ${JSON.stringify(bot1.calls.sendMessage)} — errs: ${JSON.stringify(errs)}`);
   }
 
-  // Пользователь в БД?
+  // Пользователь в БД со status=pending.
   const db = getDb();
   const u = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(555);
-  if (u && u.first_name === 'Alice' && u.username === 'alice') {
-    ok('/start: user upserted in DB');
+  if (u && u.first_name === 'Alice' && u.username === 'alice' && u.status === 'pending') {
+    ok('/start: user upserted in DB with status=pending');
   } else {
     bad('/start user upsert', JSON.stringify(u));
   }
