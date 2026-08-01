@@ -1,8 +1,8 @@
 # 05. API
 
-> **spec_version:** 0.1.0
+> **spec_version:** 0.3.0
 > **status:** draft
-> **last_updated:** 2026-07-30
+> **last_updated:** 2026-08-01
 
 ## q1. Общие правила
 
@@ -169,7 +169,32 @@ X-Telegram-Init-Data: <значение из window.Telegram.WebApp.initData>
 
 Любой невалидный шаг → 401.
 
-## q10. Связанные секции
+## q10. Статика и SPA fallback
+
+Mini App (фронтенд из `web/dist`) **раздаётся самим Fastify-сервером** через
+`@fastify/static`. Это позволяет деплоить одним контейнером и одним процессом
+(без отдельного nginx для статики).
+
+### Поведение
+
+- `GET /` — отдаёт `web/dist/index.html`.
+- `GET /assets/*` — отдаёт файлы из `web/dist/assets/*` (cache на 1 год, immutable).
+- `GET /favicon.ico`, `/robots.txt` и прочие статические файлы из `web/dist/` — отдаются как есть.
+- `GET /api/*` — идут в роуты API, **не** в static handler. Caddy проксирует всё равно на api, и api сам разруливает.
+- **SPA fallback:** если `GET <любой путь без /api префикса>` не найден в `web/dist` — отдаём `index.html` (для клиентского роутинга). Это нужно, например, для `GET /history` (в URL строке Mini App), `/settings` и т.п.
+
+### Конфигурация
+
+- `STATIC_DIR` env-переменная (по умолчанию `''` — отключено, для дев-режима). В Docker-образе: `STATIC_DIR=/app/web/dist`.
+- Если `STATIC_DIR` пустой или не существует — Fastify **не** регистрирует static plugin, всё идёт через обычные роуты (404 если нет).
+
+### Почему не отдельный nginx
+
+- На MVP — лишний контейнер/процесс. Один Fastify отдаёт и API, и статику.
+- Caddy **всё равно** проксирует на api — он не знает, что api сам раздаёт статику.
+- Если в будущем выделим статику в CDN — поменяем только этот раздел.
+
+## q11. Связанные секции
 
 - `04-data-model.md` — структура таблиц.
 - `07-non-functional.md#q3` — детали валидации `initData`.
