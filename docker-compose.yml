@@ -1,33 +1,31 @@
-# docker-compose.yml — production-like стэк.
-# В v0.1.0 — один сервис api+web. Nginx подключим отдельным контейнером
-# после того, как подготовим TLS (certbot). Сейчас — прямое подключение
-# к api:3000, а статику отдаёт сам api (route /static/*).
+# docker-compose.yml — dev-стэк: api (с раздачей статики из web/dist) и больше ничего.
 #
-# Хостовые тома:
-#   /var/lib/habitstracker   — файл SQLite
-#   /var/backups/habitstracker — бэкапы
+# v0.3.0: в проде используем docker-compose.deploy.yml + Caddy (см. README → "Деплой").
+# Этот файл — для локальной разработки без TLS и без Caddy.
 #
-# Управление через Portainer: стэк "habitstracker" с этим файлом.
+# Управление через Portainer или docker compose CLI.
 
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: habitstracker-api
+    container_name: habitstracker-api-dev
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      # Хост для SQLite, смонтированный в /data (см. volumes).
+      # STATIC_DIR=/app/web/dist — нужно, чтобы api раздавал web/dist (см. 05-api.md#q10).
+      # DATABASE_PATH=/data/habits.db — файл SQLite (внутри контейнера).
       - DATABASE_PATH=/data/habits.db
       - STATIC_DIR=/app/web/dist
     volumes:
+      # dev: используем named volumes, чтобы данные не потерялись между рестартами.
       - habits-data:/data
       - habits-backups:/backups
     ports:
-      # На VPS предполагается, что TLS терминирует nginx (или cloudflare).
-      # Для прямого теста без TLS — открыть 3000.
+      # 127.0.0.1:3000 — чтобы не светить 3000 наружу; для проверки через Caddy/ngrok
+      # или прямой http://localhost:3000.
       - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
@@ -43,14 +41,4 @@ services:
 
 volumes:
   habits-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/lib/habitstracker
   habits-backups:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/backups/habitstracker
