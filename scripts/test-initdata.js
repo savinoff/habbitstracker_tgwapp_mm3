@@ -16,7 +16,7 @@
 //   - user не JSON → BAD_USER
 //   - безопасный constant-time compare (длина не равна → отказ без падения)
 
-import { createHash, createHmac } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 // Чтобы избежать import'а dotenv/config в тесте — формируем env заранее.
 process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'TEST_BOT_TOKEN';
@@ -80,7 +80,8 @@ function buildInitData(fields) {
     .filter((p) => !p.startsWith('hash='))
     .sort()
     .join('\n');
-  const secretKey = createHash('sha256').update(BOT_TOKEN).digest();
+  // spec:05-api.md#q9: secret_key = HMAC-SHA256(key="WebAppData", msg=BOT_TOKEN)
+  const secretKey = createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
   const hash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
   return `${parts}&hash=${hash}`;
 }

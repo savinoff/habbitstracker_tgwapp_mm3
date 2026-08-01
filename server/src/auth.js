@@ -103,7 +103,9 @@ export function validateInitData(raw, botToken, opts = {}) {
   // 1. Подпись.
   // buildDataCheckString получает raw строку чтобы сохранить URL-encoded форму полей.
   const dataCheckString = buildDataCheckString(raw);
-  const secretKey = createHash('sha256').update(botToken).digest();
+  // spec:05-api.md#q9, https://core.telegram.org/bots/webapps#validating-data
+  // secret_key = HMAC-SHA256(key="WebAppData", msg=bot_token) — не sha256(bot_token)!
+  const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest();
   const computed = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
   if (!safeEqualHex(computed, hash)) {
     // DEBUG (v0.3.2): пишем метрики чтобы понять что не сходится в проде.
