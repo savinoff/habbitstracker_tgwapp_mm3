@@ -2,9 +2,12 @@
 
 Telegram Mini App — личный трекер привычек. Два опроса в день (утро + вечер), напоминания от бота, история, всё на своём VPS, никаких внешних сервисов.
 
-![spec](https://img.shields.io/badge/spec-0.3.2-blue)
+![spec](https://img.shields.io/badge/spec-0.3.4-blue)
 ![status](https://img.shields.io/badge/license-MIT-green)
 ![status](https://img.shields.io/badge/deployed-2026--08--01-brightgreen)
+![status](https://img.shields.io/badge/Mini_App-working_in_Telegram-2ea44f?logo=telegram)
+
+> 🎉 **v0.3.4 — первая рабочая версия в проде.** Mini App загружается в реальном Telegram WebView, форма утреннего/вечернего опроса работает, HMAC валидация проходит. См. [changelog](docs/spec/CHANGELOG-spec.md) — там три недели отладки, очень полезные уроки в финале.
 
 ## Что это
 
