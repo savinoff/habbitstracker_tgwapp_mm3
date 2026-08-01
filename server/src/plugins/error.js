@@ -3,6 +3,11 @@
 // Так клиент Mini App всегда может полагаться на структуру.
 //
 // spec:05-api.md#q1 — формат ошибок
+//
+// v0.3.0: 404-handler убран из этого плагина. Он регистрируется в
+// server/src/index.js ПОСЛЕ @fastify/static, чтобы:
+//   - /api/foo → JSON 404 (как раньше)
+//   - /history, /settings → SPA index.html (новое поведение, q10)
 
 export async function errorPlugin(fastify) {
   fastify.setErrorHandler((err, req, reply) => {
@@ -23,11 +28,5 @@ export async function errorPlugin(fastify) {
     if (err.details) body.error.details = err.details;
 
     reply.code(status).send(body);
-  });
-
-  fastify.setNotFoundHandler((req, reply) => {
-    reply.code(404).send({
-      error: { code: 'NOT_FOUND', message: `Route not found: ${req.method} ${req.url}` },
-    });
   });
 }
