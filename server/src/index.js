@@ -24,6 +24,8 @@ import healthRoutes from './routes/health.js';
 import surveyRoutes from './routes/surveys.js';
 import historyRoutes from './routes/history.js';
 import settingsRoutes from './routes/settings.js';
+import userRoutes from './routes/users.js';
+import adminRoutes from './routes/admin.js';
 import { startBot, stopBot } from './bot.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { runMigrations } from './migrate.js';
@@ -55,6 +57,12 @@ const build = async () => {
 
   // spec:05-api.md#q6, q7 — GET/POST /api/settings.
   await app.register(settingsRoutes);
+
+  // spec:05-api.md#q12 — /api/users/me, /api/users/me/settings (v0.4.0+).
+  await app.register(userRoutes);
+
+  // spec:05-api.md#q13 — /api/admin/* (v0.4.0+, owner-only).
+  await app.register(adminRoutes);
 
   // spec:05-api.md#q10 — статика и SPA fallback.
   // ВАЖНО: регистрируем ПОСЛЕ всех API-роутов, чтобы /api/* не уходил в static.

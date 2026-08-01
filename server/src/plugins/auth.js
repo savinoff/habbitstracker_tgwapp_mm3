@@ -12,6 +12,7 @@
 import fp from 'fastify-plugin';
 import { validateInitData, ValidationError } from '../auth.js';
 import * as users from '../users.js';
+import * as audit from '../audit.js';
 import { config } from '../config.js';
 
 const PUBLIC_ROUTES = new Set(['/api/health']);
@@ -76,6 +77,15 @@ async function authPluginImpl(fastify) {
       if (!dbUser) {
         // Юзер ещё не /start бот. Не пускаем.
         req.log.info({ telegramId: user.id }, 'login denied: user not registered');
+        audit.audit({
+          actor_id: null,
+          action: 'login_denied',
+          target_id: user.id,
+          request_ip: req.ip,
+          user_agent: req.headers['user-agent'] || null,
+          request_id: req.id,
+          details: { reason: 'NOT_REGISTERED' },
+        });
         reply.code(401).send({
           error: {
             code: 'NOT_REGISTERED',
@@ -85,6 +95,15 @@ async function authPluginImpl(fastify) {
         return reply;
       }
       if (dbUser.status === 'pending') {
+        audit.audit({
+          actor_id: null,
+          action: 'login_denied',
+          target_id: user.id,
+          request_ip: req.ip,
+          user_agent: req.headers['user-agent'] || null,
+          request_id: req.id,
+          details: { reason: 'NOT_APPROVED', status: 'pending' },
+        });
         reply.code(403).send({
           error: {
             code: 'NOT_APPROVED',
@@ -95,6 +114,15 @@ async function authPluginImpl(fastify) {
         return reply;
       }
       if (dbUser.status === 'denied') {
+        audit.audit({
+          actor_id: null,
+          action: 'login_denied',
+          target_id: user.id,
+          request_ip: req.ip,
+          user_agent: req.headers['user-agent'] || null,
+          request_id: req.id,
+          details: { reason: 'BANNED', status: 'denied' },
+        });
         reply.code(403).send({
           error: {
             code: 'BANNED',
@@ -105,6 +133,15 @@ async function authPluginImpl(fastify) {
         return reply;
       }
       if (dbUser.status === 'banned' || dbUser.deleted_at !== null) {
+        audit.audit({
+          actor_id: null,
+          action: 'login_denied',
+          target_id: user.id,
+          request_ip: req.ip,
+          user_agent: req.headers['user-agent'] || null,
+          request_id: req.id,
+          details: { reason: 'BANNED', status: 'banned' },
+        });
         reply.code(403).send({
           error: {
             code: 'BANNED',
@@ -122,6 +159,18 @@ async function authPluginImpl(fastify) {
     dbUser = users.findByTelegramId(user.id);
 
     req.user = { ...user, _dbId: dbUser.id, isOwner: Boolean(isOwner), status: dbUser.status };
+
+    // Audit: успешный login (только для не-owner, чтобы не засорять).
+    if (!isOwner) {
+      audit.audit({
+        actor_id: null,
+        action: 'login_success',
+        target_id: user.id,
+        request_ip: req.ip,
+        user_agent: req.headers['user-agent'] || null,
+        request_id: req.id,
+      });
+    }
   });
 }
 

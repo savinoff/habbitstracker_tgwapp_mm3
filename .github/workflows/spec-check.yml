@@ -63,6 +63,12 @@ jobs:
           OWNER_TELEGRAM_ID: '777'
         run: node scripts/test-auth.js
 
+      - name: Run admin routes + audit tests (v0.4.0+)
+        env:
+          TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN
+          OWNER_TELEGRAM_ID: '777'
+        run: node scripts/test-admin.js
+
       - name: Summary
         if: always()
         run: echo "spec-check finished with status ${{ job.status }}"
