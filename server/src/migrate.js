@@ -88,7 +88,7 @@ export function runMigrations() {
         UPDATE users
         SET status = 'approved', updated_at = ?, last_seen_at = COALESCE(last_seen_at, ?)
         WHERE telegram_id = ?
-      `).run(now, now, ownerId);
+      `).run(now, now, Number(ownerId));
       logger.info(
         { ownerId, rowsAffected: r.changes },
         'post-migration: owner marked as approved',
